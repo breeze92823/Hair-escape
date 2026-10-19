@@ -26,8 +26,8 @@ export const PLAYER_DIMS = { radius: 0.4, height: 1.8 }
 
 // --- Look ------------------------------------------------------------------
 export const COLORS = {
-  horizon: '#eef6ff',
-  zenith: '#8fcfff',
+  horizon: '#f6e4ef',
+  zenith: '#7fc4ff',
   grass: '#4cc23e',
   grassDark: '#3aa830',
 }
@@ -86,7 +86,15 @@ export const CAMERA = {
   speedFov: 4, // degrees the FOV widens at full speed
   speedEase: 3, // 1/s the speed framing eases in and out
   clearEase: 4, // 1/s the boom eases back out after a wall pulled it in
+  framingEase: 2.5, // 1/s a zone's framing (setFraming) tilts the view in
 }
+
+// Zone 2, LAVA RUN: the raised over-the-shoulder view looking north down the slabs.
+export const LAVA_RUN = { cameraPitch: 0.62, cameraDistance: 13 }
+// Zone 3, ICE LAKE: high behind the player, looking a few metres past them, so
+// the player sits low in frame and the whole lake, the gold ring and the
+// fortress fit in from the entrance.
+export const ICE_LAKE = { cameraPitch: 0.45, cameraDistance: 15, cameraLookAhead: 6 }
 
 // SDK setting keys this game listens for (they appear in the portal's settings menu).
 export const SETTINGS = {

@@ -215,8 +215,6 @@ function buildPortal(g, addCollider) {
 
   label(g, [{ text: 'START', size: 1, fill: ['#d6ff6a', '#45e01e'], stroke: '#14400c' }], [0, H + post + 2.6, fz], { unit: 1.5 })
 
-  shimmer.visible = false
-
   return {
     shimmer,
     // Walking out through the doorway counts as entering the course.

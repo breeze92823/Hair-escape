@@ -34,6 +34,18 @@ let zoomEased = CAMERA.distance
 let rush = 0 // eased 0..1 speed factor
 let clearance = 1 // 0..1 of the boom the walls allow, eased back out
 
+// A zone asks for its framing: the pitch eases there (until the player drags
+// the view), the zoom glides to the distance, and the look-at point eases
+// `ahead` m in front of the player (dropping them lower in the frame).
+let pitchGoal = null
+let aheadGoal = 0
+let ahead = 0
+export function setFraming(pitch, distance, lookAhead = 0) {
+  pitchGoal = pitch
+  zoomTarget = clamp(distance, CAMERA.minDistance, CAMERA.maxDistance)
+  aheadGoal = lookAhead
+}
+
 export function getYaw() {
   return state.yaw
 }
@@ -48,6 +60,11 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v)
 export function update(camera, dt) {
   state.yaw -= inputState.look.dx * CAMERA.lookSensitivity * sensitivity
   state.pitch += inputState.look.dy * CAMERA.lookSensitivity * sensitivity
+  if (inputState.look.dx || inputState.look.dy) pitchGoal = null
+  else if (pitchGoal !== null) {
+    state.pitch += (pitchGoal - state.pitch) * (1 - Math.exp(-CAMERA.framingEase * dt))
+    if (Math.abs(pitchGoal - state.pitch) < 0.002) pitchGoal = null
+  }
   inputState.look.dx = 0
   inputState.look.dy = 0
   state.pitch = clamp(state.pitch, CAMERA.minPitch, CAMERA.maxPitch)
@@ -92,9 +109,10 @@ export function update(camera, dt) {
     camera.updateProjectionMatrix()
   }
 
-  look.x = followed.x
+  ahead += (aheadGoal - ahead) * (1 - Math.exp(-CAMERA.framingEase * dt))
+  look.x = followed.x - Math.sin(state.yaw) * ahead
   look.y = followed.y + player.dims.height * CAMERA.targetHeight
-  look.z = followed.z
+  look.z = followed.z - Math.cos(state.yaw) * ahead
 
   const cp = Math.cos(state.pitch)
   const px = look.x + Math.sin(state.yaw) * cp * distance

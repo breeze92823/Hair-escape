@@ -1,9 +1,9 @@
 import { Clock, Group, PCFSoftShadowMap, PerspectiveCamera, Scene, SRGBColorSpace, Vector3, WebGLRenderer } from 'three'
-import { CAMERA, SPAWN, SPAWN_FACING } from './config.js'
+import { CAMERA, ICE_LAKE, LAVA_RUN, SPAWN, SPAWN_FACING } from './config.js'
 import * as bloxity from './bloxity.js'
 import { inputState, install as installInput } from './input.js'
 import { floorAt, player, resetPlayer, step as stepPlayer } from './player.js'
-import { syncYawToPlayer, update as updateCamera } from './camera.js'
+import { setFraming, syncYawToPlayer, update as updateCamera } from './camera.js'
 import { createFog, createGround, createLights, createSky } from './world.js'
 import { buildDefaultCharacter, loadBaseCharacter } from './avatar/character.js'
 import { applyProportions, attachEquippedAccessories } from './avatar/loader.js'
@@ -13,7 +13,8 @@ import { isEquipped } from './avatar/cdn.js'
 import { addCollider } from './colliders.js'
 import { buildLobby } from './lobby/lobby.js'
 import { STEP_TIME } from './lobby/treadmill.js'
-import { buildCourse } from './course.js'
+import { buildLavaPath } from './lavaPath.js'
+import { buildZone3, ZONE3_SPAWN, ZONE3_WIN } from './zone3.js'
 import { createHud } from './hud.js'
 import * as game from './game/state.js'
 
@@ -56,9 +57,10 @@ scene.add(createSky(), createGround())
 const lights = createLights()
 scene.add(lights.hemi, lights.sun, lights.sun.target)
 
-// --- World: the lobby (spawn) and the course behind its START portal --------
+// --- World: the lobby (spawn) ------------------------------------------------
 const lobby = buildLobby(scene, addCollider, { onEvent: () => hud.openEvent() })
-const course = buildCourse(scene, addCollider)
+const lava = buildLavaPath(scene, addCollider)
+const zone3 = buildZone3(scene, addCollider)
 
 // --- HUD + progression ------------------------------------------------------
 const hud = createHud({
@@ -101,7 +103,7 @@ game.onEvent((e) => {
   } else if (e.type === 'quest') {
     hud.toast('Quest Complete!', '#b6ff7a')
   } else if (e.type === 'win') {
-    hud.toast('ESCAPED! +1 Win', '#ffd21a')
+    hud.toast(`ESCAPED! +${e.amount} Win${e.amount > 1 ? 's' : ''}`, '#ffd21a')
     hud.chat(`<b>[Server]</b> You escaped! Total wins: ${e.wins}`)
   } else if (e.type === 'rebirth') {
     hud.toast(`REBIRTH ${e.rebirths}! +50% Hair`, '#d9a8ff')
@@ -184,11 +186,6 @@ function popupAt(text, x, y, z) {
   hud.popup(text, ((screenPos.x + 1) / 2) * window.innerWidth, ((1 - screenPos.y) / 2) * window.innerHeight)
 }
 
-function teleport(spot, facing = Math.PI) {
-  resetPlayer(spot, facing)
-  syncYawToPlayer()
-}
-
 // Treadmills: the belt drags the runner toward +X; running on it grows hair.
 let stepTimer = 0
 function updateTreadmills(dt) {
@@ -215,35 +212,47 @@ function updateTreadmills(dt) {
 }
 
 let finishTimer = null
-function updateCourse(dt, time) {
+let framing = null // the zone whose camera framing is applied (null = hub)
+function respawn(spot = SPAWN) {
+  resetPlayer(spot, SPAWN_FACING)
+  syncYawToPlayer()
+  framing = undefined // the teleport resets the camera pitch: re-apply the zone framing next frame
+}
+function updateZones(dt, time) {
   const p = player.position
-  if (lobby.portalHit(p) && !game.state.flags?.portal) {
-    game.setFlag('portal')
-    hud.toast('Escape the course!', '#ffffff')
+  if (lobby.portalHit(p) && !game.state.flags?.portal) game.setFlag('portal')
+  // Each zone tilts the camera to its own view north; the hub restores the default.
+  const zone = zone3.contains(p) ? ICE_LAKE : lava.contains(p) ? LAVA_RUN : null
+  if (zone !== framing) {
+    framing = zone
+    if (zone) setFraming(zone.cameraPitch, zone.cameraDistance, zone.cameraLookAhead)
+    else setFraming(CAMERA.startPitch, CAMERA.distance)
   }
-  let gatePrompt = null
-  for (const e of course.update(dt, time, p, game.state.hair)) {
-    if (e === 'fell') {
-      teleport(course.checkpoint())
-      hud.toast('Oops!', '#ff8a8a')
-    } else if (e === 'checkpoint') hud.toast('Checkpoint!', '#b6ff7a')
-    else if (e === 'bounce') {
-      player.velocity.y = course.BOUNCE.speed
-      player.grounded = false
-    } else if (e === 'finish') {
-      game.addWin()
-      clearTimeout(finishTimer)
-      finishTimer = setTimeout(() => {
-        course.reset()
-        teleport(SPAWN, SPAWN_FACING)
-      }, 1800)
-    } else if (e.gate) gatePrompt = `Grow ${e.gate.need} hair to open this gate (you have ${game.state.hair})`
+  // Zone 2: the finish pad awards a Win and the run carries on into Zone 3.
+  const lavaEvent = lava.update(dt, time, p)
+  if (lavaEvent === 'fell') {
+    lava.reset()
+    respawn()
+    hud.toast('Oops! Lava!', '#ff8a8a')
+  } else if (lavaEvent === 'finish') game.addWin()
+  // Zone 3: a fall puts you back on its entrance; the ring awards wins and sends you home.
+  const iceEvent = zone3.update(dt, time, p)
+  if (iceEvent === 'fell') {
+    respawn(ZONE3_SPAWN)
+    hud.toast('Brrr! Too cold!', '#9fdcff')
+  } else if (iceEvent === 'finish') {
+    game.addWin(ZONE3_WIN)
+    clearTimeout(finishTimer)
+    finishTimer = setTimeout(() => {
+      lava.reset()
+      zone3.reset()
+      respawn()
+    }, 1800)
   }
-  return gatePrompt
 }
 
 // Nearest interactable in range drives the prompt; E (or clicking the prompt) runs it.
-function updateInteraction(gatePrompt) {
+function updateInteraction() {
   const p = player.position
   let best = null
   let bestD = Infinity
@@ -258,7 +267,7 @@ function updateInteraction(gatePrompt) {
     const [text, enabled] = best.prompt()
     hud.setPrompt(text, enabled, best.action)
     if (inputState.interact && enabled) best.action()
-  } else hud.setPrompt(gatePrompt, false)
+  } else hud.setPrompt(null, false)
   inputState.interact = false
 }
 
@@ -271,7 +280,8 @@ renderer.setAnimationLoop(() => {
   time += dt
   stepPlayer(dt)
   updateTreadmills(dt)
-  updateInteraction(updateCourse(dt, time))
+  updateZones(dt, time)
+  updateInteraction()
   lobby.update(dt, time)
   hud.setBoost(Math.max(0, Math.ceil((game.state.boostUntil - Date.now()) / 1000)))
 
@@ -301,5 +311,5 @@ window.addEventListener('beforeunload', bloxity.teardown)
 
 // Dev-only console hook, e.g. __game.teleport(10, 0, -5)
 if (import.meta.env.DEV) {
-  window.__game = { player, game, course, setHairLength, teleport: (x, y, z, facing = player.facing) => { resetPlayer({ x, y, z }, facing); syncYawToPlayer() } }
+  window.__game = { player, game, setHairLength, teleport: (x, y, z, facing = player.facing) => { resetPlayer({ x, y, z }, facing); syncYawToPlayer() } }
 }

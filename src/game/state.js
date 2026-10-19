@@ -131,9 +131,9 @@ export function setFlag(name) {
   changed()
 }
 
-export function addWin() {
-  state.wins++
-  emit({ type: 'win', wins: state.wins })
+export function addWin(amount = 1) {
+  state.wins += amount
+  emit({ type: 'win', wins: state.wins, amount })
   changed()
 }
 
