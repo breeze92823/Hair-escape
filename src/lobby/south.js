@@ -32,7 +32,7 @@ function buildHairstyles(g, addCollider, minX) {
   const x1 = -16.5
   const z0 = 21 // m, just south of the bleachers: the stage's north half is the braids / curls shelf
   const z1 = 48.5
-  const h = 0.55
+  const h = 0.4 // m: well under PHYSICS.stepUp, so you walk onto the stage without jumping
   slab(g, studMaterial('#f4f2ff', z1 - z0, x1 - x0), (x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 0, h)
   addCollider((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h)
   slab(g, std('#ff6ad5', { roughness: 0.4 }), x1 - 0.15, (z0 + z1) / 2, 0.3, z1 - z0, h, h + 0.1)

@@ -389,8 +389,9 @@ export function createCableSfx() {
   document.addEventListener('visibilitychange', () => document.hidden && sleep())
   let prev = 'idle'
 
-  // Every frame (also in the salon, so a dropped cable's loops still fade).
-  function update(dt, cable) {
+  // Every frame (also in the salon, so a dropped cable's loops still fade). `muted`: the game is
+  // frozen (a tutorial pause), so the loops fade out while the cable holds still.
+  function update(dt, cable, muted = false) {
     const st = cable.state
     if (!ctx || !loops) {
       prev = st
@@ -428,7 +429,7 @@ export function createCableSfx() {
     glide(5, loops.rub.gain, on ? CABLE_SFX.friction * (0.5 + 0.5 * v) : 0, on ? attack : 0.04) // stops dead when the hands open
     glide(6, loops.rubBand.frequency, 800 + 400 * v, 0.1) // Hz
     glide(7, loops.fibres.playbackRate, 0.8 + 0.3 * v, 0.1)
-    glide(8, master.gain, CABLE_SFX.volume * (settings.sfx_volume ?? 1), 0.05)
+    glide(8, master.gain, muted ? 0 : CABLE_SFX.volume * (settings.sfx_volume ?? 1), 0.05)
   }
 
   return { update }

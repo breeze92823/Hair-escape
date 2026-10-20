@@ -25,6 +25,7 @@ import { kit, lavaTexture, voxelTexture } from './lavaPath.js'
 import { arrowTexture, decal, PALACE_Z, ZONE4_FINISH, ZONE4_PIT } from './zone4.js'
 import { label } from './lobby/labels.js'
 import { buildTreadmill } from './lobby/treadmill.js'
+import { paidPad, winPad } from './zoneProps.js'
 
 export const ZONE5_NAME = 'PURPLE PALACE'
 export const ZONE5_BONUS = 1 // wins for jumping through the chamber's ring
@@ -420,24 +421,8 @@ function buildFinale(k) {
   // The final platform: win pad with a trophy, the blue +30 pad, an x1.4 Hair treadmill, a crystal.
   const f = FINALE
   dais(k, f)
-  const pad = (z, color, emissive) => {
-    k.mesh(new BoxGeometry(WIN_PAD.size + 0.3, 0.08, WIN_PAD.size + 0.3), k.std('#d9a400'), WIN_PAD.x, f.top + 0.04, z, { cast: false })
-    k.mesh(new BoxGeometry(WIN_PAD.size, 0.12, WIN_PAD.size), k.std(color, { emissive, emissiveIntensity: 0.45, roughness: 0.4 }), WIN_PAD.x, f.top + 0.06, z, { cast: false })
-  }
-  pad(WIN_PAD.z, '#ffe11a', '#ffc400')
-  pad(WIN_PAD.z - WIN_PAD.size - 1, '#3fe0ff', '#1aa8e0')
-  const trophy = new Group()
-  const part = (geo, y) => {
-    const m = new Mesh(geo, goldMat(k))
-    m.position.y = y
-    trophy.add(m)
-  }
-  part(new BoxGeometry(0.55, 0.16, 0.55), 0)
-  part(new CylinderGeometry(0.07, 0.1, 0.3, 10), 0.23)
-  part(new CylinderGeometry(0.38, 0.16, 0.5, 16), 0.63)
-  part(new BoxGeometry(0.95, 0.08, 0.08), 0.68) // handles
-  trophy.position.set(WIN_PAD.x, f.top + 1.4, WIN_PAD.z)
-  k.g.add(trophy)
+  const pad = winPad(k, WIN_PAD.x, WIN_PAD.z, f.top, ZONE5_WIN)
+  paidPad(k, WIN_PAD.x, WIN_PAD.z - WIN_PAD.size - 1, f.top, '+30 Wins')
 
   // The x1.4 Hair treadmill: runs like the Hub's, console to the north (the back wall).
   const treadmill = buildTreadmill(k.g, k.addCollider, {
@@ -448,7 +433,7 @@ function buildFinale(k) {
     ],
   })
   crystal(k, f.x0 + 2, f.top, f.z1 + 2, 0.7, 2.2, '#ff2f8f', '#c0105a')
-  return { trophy, treadmill }
+  return { pad, treadmill }
 }
 
 let yellowTex = null
@@ -462,9 +447,7 @@ export function buildZone5(scene, addCollider) {
 
   buildApproach(k)
   buildFront(k)
-  const { ring, trophy, treadmill } = buildInside(k)
-  label(g, [{ text: `+${ZONE5_WIN} Wins`, size: 0.7, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [WIN_PAD.x, FINALE.top + 2.6, WIN_PAD.z], { unit: 1.4 })
-  label(g, [{ text: '+30 Wins', size: 0.7, fill: ['#d6fbff', '#3fd8ff'], stroke: '#0a3a5a' }], [WIN_PAD.x, FINALE.top + 0.9, WIN_PAD.z - WIN_PAD.size - 1], { unit: 1.4 })
+  const { ring, pad, treadmill } = buildInside(k)
   label(g, [{ text: `🏆 +${ZONE5_BONUS} Win`, size: 0.5, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [RING.x + RING.radius + 1, RING.y, RING.z], { unit: 1.2 })
 
   label(g, [
@@ -484,11 +467,9 @@ export function buildZone5(scene, addCollider) {
     // Returns 'burned' (lava), 'fell' (off the open east side of the plateau), 'bonus' (through the ring) or 'finish' (the win pad).
     update(dt, time, p) {
       ring.position.y = RING.y + Math.sin(time * 2) * 0.15
-      trophy.rotation.y = time * 1.5
-      trophy.position.y = FINALE.top + 1.4 + Math.sin(time * 2) * 0.1
+      pad.update(time)
       treadmill.update(dt, time)
-      const onPad = Math.abs(p.x - WIN_PAD.x) < WIN_PAD.size / 2 && Math.abs(p.z - WIN_PAD.z) < WIN_PAD.size / 2
-      if (!won && onPad && p.y >= FINALE.top - 0.05) {
+      if (!won && pad.onPad(p)) {
         won = true
         return 'finish'
       }

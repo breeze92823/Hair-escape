@@ -7,12 +7,12 @@
 // you back on the entrance. Procedural like Zone 2 (voxel canvas textures,
 // boxes, cones).
 import {
-  BoxGeometry, ConeGeometry, CylinderGeometry, Group, Mesh,
-  MeshStandardMaterial, PlaneGeometry,
+  ConeGeometry, Group, MeshStandardMaterial, PlaneGeometry,
 } from 'three'
 import { LAVA_FINISH, buildTree, kit, voxelTexture } from './lavaPath.js'
 import { label } from './lobby/labels.js'
 import { buildTreadmill } from './lobby/treadmill.js'
+import { winPad } from './zoneProps.js'
 
 export const ZONE3_NAME = 'ICE LAKE'
 export const ZONE3_WIN = 3 // wins for stepping on the goal pad (advertised on the Lava Run trophy)
@@ -41,7 +41,7 @@ const PATH = [
 ]
 const GOAL = { z0: -147, z1: LAKE.z1, w: 14, top: 1.6 } // the ice platform at the end of the lake
 const goalZ = (GOAL.z0 + GOAL.z1) / 2
-const PAD = { x: -3.2, size: 3 } // the yellow win pad, left of centre
+const PAD = { x: -3.2 } // the yellow win pad, left of centre
 const TREAD = { x: 3.4, len: 4.8, w: 2.4, mult: 1.1 } // the x1.1 Hair treadmill, right of centre (m); its console faces north
 const COLUMN_H = 5 // m: the tall ice columns on the canyon-side corners
 
@@ -229,31 +229,12 @@ function buildGoal(k) {
     pillar(sx * (GOAL.w / 2 - 1.1), GOAL.z1 + 1.1, 2.2, COLUMN_H)
   }
 
-  // Win pad and the trophy spinning over it.
-  k.mesh(new BoxGeometry(PAD.size + 0.3, 0.08, PAD.size + 0.3), k.std('#d9a400'), PAD.x, GOAL.top + 0.04, goalZ, { cast: false })
-  k.mesh(
-    new BoxGeometry(PAD.size, 0.12, PAD.size),
-    k.std('#ffe11a', { emissive: '#ffc400', emissiveIntensity: 0.45, roughness: 0.4 }),
-    PAD.x, GOAL.top + 0.06, goalZ, { cast: false },
-  )
-  const gold = k.std('#ffcf1f', { emissive: '#d99a00', emissiveIntensity: 0.35, roughness: 0.3, metalness: 0.4 })
-  const trophy = new Group()
-  const part = (geo, y) => {
-    const m = new Mesh(geo, gold)
-    m.position.y = y
-    m.castShadow = true
-    trophy.add(m)
-  }
-  part(new BoxGeometry(0.55, 0.16, 0.55), 0)
-  part(new CylinderGeometry(0.07, 0.1, 0.3, 10), 0.23)
-  part(new CylinderGeometry(0.38, 0.16, 0.5, 16), 0.63)
-  part(new BoxGeometry(0.95, 0.08, 0.08), 0.68) // handles
-  trophy.position.set(PAD.x, GOAL.top + 1.4, goalZ)
-  k.g.add(trophy)
+  // The shared yellow win pad with its spinning trophy and "+N Wins" label.
+  const pad = winPad(k, PAD.x, goalZ, GOAL.top, ZONE3_WIN)
 
   // Ice throne behind the pad, facing back down the lake.
-  const tx = PAD.x - 2.2
-  const tz = goalZ - 2.6
+  const tx = PAD.x - 2.4
+  const tz = goalZ - 3
   k.voxBox({ x: tx, z: tz, w: 1.6, d: 1.4, y0: GOAL.top, y1: GOAL.top + 0.9, side: tex.ice, top: tex.snow, cell: 0.8 })
   k.voxBox({ x: tx, z: tz - 0.55, w: 1.6, d: 0.35, y0: GOAL.top + 0.9, y1: GOAL.top + 2.6, side: tex.ice, top: tex.snow, cell: 0.8, collide: false })
   for (const s of [-1, 1]) k.voxBox({ x: tx + s * 0.72, z: tz, w: 0.25, d: 1.2, y0: GOAL.top + 0.9, y1: GOAL.top + 1.4, side: tex.snow, cell: 0.5, collide: false })
@@ -266,7 +247,7 @@ function buildGoal(k) {
       { text: `x${TREAD.mult} Hair`, size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' },
     ],
   })
-  return { trophy, treadmill }
+  return { pad, treadmill }
 }
 
 // `nextWin`: the wins the next zone's finish awards, advertised on the trophy sign.
@@ -279,14 +260,13 @@ export function buildZone3(scene, addCollider, { nextWin = 0 } = {}) {
   buildLake(k)
   buildBanks(k)
   buildMountains(k)
-  const { trophy, treadmill } = buildGoal(k)
+  const { pad, treadmill } = buildGoal(k)
 
   label(g, [
     { text: 'RECOMMENDED', size: 0.45, fill: ['#bff4ff', '#2fd8ff'], stroke: '#0a2a5a' },
     { text: 'LEVEL 16', size: 1, fill: '#ffffff', stroke: '#1b2a4a' },
   ], [0, 3.8, -117], { unit: 1.4 })
-  label(g, [{ text: `+${ZONE3_WIN} Wins`, size: 0.7, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [PAD.x, GOAL.top + 0.75, goalZ + 1.3], { unit: 0.9 })
-  label(g, [{ text: `🏆 +${nextWin} Wins`, size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' }], [PAD.x, GOAL.top + 2.75, goalZ], { unit: 0.9 })
+  label(g, [{ text: `🏆 +${nextWin} Wins`, size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' }], [PAD.x, GOAL.top + 4.5, goalZ], { unit: 0.9 })
 
   let won = false
   return {
@@ -295,13 +275,11 @@ export function buildZone3(scene, addCollider, { nextWin = 0 } = {}) {
     contains: (p) => p.z < LAVA_FINISH.z0 && p.z > FAR_Z && Math.abs(p.x) < GLACIER.x1,
     // Returns 'fell' or 'finish' when the player triggers one.
     update(dt, time, p) {
-      trophy.rotation.y = time * 1.5
-      trophy.position.y = GOAL.top + 1.4 + Math.sin(time * 2) * 0.1
+      pad.update(time)
       treadmill.update(dt, time)
       const inLake = Math.abs(p.x) < LAKE.halfW && p.z < LAKE.z0 && p.z > LAKE.z1
       if (inLake && p.y < WATER_Y + 0.15) return 'fell'
-      const onPad = Math.abs(p.x - PAD.x) < PAD.size / 2 && Math.abs(p.z - goalZ) < PAD.size / 2
-      if (!won && onPad && p.y >= GOAL.top - 0.05) {
+      if (!won && pad.onPad(p)) {
         won = true
         return 'finish'
       }

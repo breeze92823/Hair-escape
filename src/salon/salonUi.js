@@ -279,7 +279,7 @@ const grownMetres = () => {
   return game.hairLengthFor(hair) * HAIR.hangPerLength * METRES_PER_RIG + game.trailLengthFor(hair)
 }
 
-export function createSalonUi({ onClose, onTab, onOrbit, onZoom, toast }) {
+export function createSalonUi({ onClose, onTab, onOrbit, onZoom, toast, error }) {
   const style = document.createElement('style')
   style.textContent = CSS
   document.head.appendChild(style)
@@ -468,7 +468,7 @@ export function createSalonUi({ onClose, onTab, onOrbit, onZoom, toast }) {
   // --- Actions -----------------------------------------------------------------
   const wear = (it) => {
     const ok = it.kind === 'color' ? game.equip(it.id) : game.wearCosmetic(it.kind, it.id)
-    if (!ok && it.req) toast(lockedText(it.req), '#ffb0b0')
+    if (!ok && it.req) error(lockedText(it.req))
   }
   const perform = (act) => {
     if (act === 'grow') return game.setLengthPick(1)
@@ -476,7 +476,7 @@ export function createSalonUi({ onClose, onTab, onOrbit, onZoom, toast }) {
     if (!it) return
     if (act === 'wear') wear(it)
     else if (act === 'off') game.takeOffCosmetic(it.kind, it.id)
-    else if (act === 'locked') toast(lockedText(it.req), '#ffb0b0')
+    else if (act === 'locked') error(lockedText(it.req))
   }
 
   // Length drag: pointer x along the track -> the shown fraction of the grown hair.

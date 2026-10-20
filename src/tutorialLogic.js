@@ -4,10 +4,10 @@
 // a lesson teaches skips past it.
 //
 // Steps: 0 walk onto the treadmill, 1 run to the level goal, 2 walk out of the START portal,
-// 3 cross the Lava Run to its Win pad, 4 come back to the Hub, 5 buy the starter hair style,
-// 6 shoot the hair cable once. `c.done` (TUTORIAL.done) means finished.
+// 3 swing on the hair over the lava and land on a slab, 4 reach the Lava Run's Win pad, 5 come back
+// to the Hub, 6 buy the starter hair style. `c.done` (TUTORIAL.done) means finished.
 //
-// c: { onBelt, level, levelGoal, inHub, wins, hasStyle, shot, done }
+// c: { onBelt, level, levelGoal, inHub, wins, hasStyle, crossed, done }
 export function nextStep(step, c) {
   if (step >= c.done) return step
   switch (step) {
@@ -16,18 +16,17 @@ export function nextStep(step, c) {
       if (c.level >= c.levelGoal) return 2
       return c.onBelt ? 1 : 0
     case 2:
-      if (c.hasStyle) return 6
-      if (c.wins >= 1) return c.inHub ? 5 : 4
       return c.inHub ? 2 : 3
     case 3:
-      if (c.wins >= 1) return c.inHub ? 5 : 4
+      if (c.crossed) return 4 // rode the hair and is standing on a slab again
       return c.inHub ? 2 : 3
     case 4:
-      return c.inHub ? 5 : 4
+      if (c.wins >= 1) return c.inHub ? 6 : 5
+      return 4 // a fall back to the Hub keeps the goal: the trail leads the way back out
     case 5:
-      return c.hasStyle || c.wins < 1 ? 6 : 5
+      return c.inHub ? 6 : 5
     case 6:
-      return c.shot ? c.done : 6
+      return c.hasStyle || c.wins < 1 ? c.done : 6
     default:
       return step
   }

@@ -59,10 +59,12 @@ export function createHairCable() {
   const b = new Vector3()
   // speedMult: times the zip speeds (the Zippy Hair upgrade, set by main.js).
   const api = { active: false, zipping: false, speedMult: 1, get flying() { return state === 'flying' }, pitch: 0, fire, stopTip, release, update, steerKeys, pathPoints, remaining, fullLength: () => reach, rideSpeed: () => (state === 'riding' ? speed / (GRAPPLE.zipSpeed * api.speedMult) : 0) }
-  // Read-only views for the foley (cableSfx.js): the state, whether the tip struck a surface,
-  // m of hair still out ahead of the hands, and rad the flying tip is still turning toward its aim.
+  // Read-only views for the foley (cableSfx.js) and the tutorial's coaching (tutorial.js): the state,
+  // the live tip position (do not mutate), whether the tip struck a surface, m of hair still out ahead
+  // of the hands, and rad the flying tip is still turning toward its aim.
   Object.defineProperties(api, {
     state: { get: () => state },
+    tip: { get: () => tip },
     anchored: { get: () => anchored },
     outLength: { get: () => (state === 'retracting' ? tailEnd : total) - s },
     tipTurn: { get: () => Math.abs(aimYaw - tipYaw) + Math.abs(aimPitch - tipPitch) },

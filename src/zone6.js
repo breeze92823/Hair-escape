@@ -25,6 +25,7 @@ import { ZONE5_EXIT } from './zone5.js'
 import { label } from './lobby/labels.js'
 import { buildTreadmill } from './lobby/treadmill.js'
 import { makeCanvas } from './lobby/paint.js'
+import { paidPad, winPad } from './zoneProps.js'
 
 export const ZONE6_NAME = 'TEAL CITADEL'
 export const ZONE6_BONUS = 1 // wins for walking through the ring on the tower ledge
@@ -343,24 +344,8 @@ function buildSummit(k) {
   k.mesh(new BoxGeometry(s.x1 - s.x0 + 0.4, 0.4, 0.5), material(k).gold, CX, s.top - 0.2, s.z0 + 0.2, { cast: false })
 
   // On top: the win pad with a trophy, the blue pad, an x1.6 Hair treadmill, lanterns.
-  const pad = (z, color, emissive) => {
-    k.mesh(new BoxGeometry(WIN_PAD.size + 0.3, 0.08, WIN_PAD.size + 0.3), k.std('#d9a400'), WIN_PAD.x, s.top + 0.04, z, { cast: false })
-    k.mesh(new BoxGeometry(WIN_PAD.size, 0.12, WIN_PAD.size), k.std(color, { emissive, emissiveIntensity: 0.45, roughness: 0.4 }), WIN_PAD.x, s.top + 0.06, z, { cast: false })
-  }
-  pad(WIN_PAD.z, '#ffe11a', '#ffc400')
-  pad(WIN_PAD.z - WIN_PAD.size - 1, '#3fe0ff', '#1aa8e0')
-  const trophy = new Group()
-  const part = (geo, y) => {
-    const m = new Mesh(geo, material(k).gold)
-    m.position.y = y
-    trophy.add(m)
-  }
-  part(new BoxGeometry(0.55, 0.16, 0.55), 0)
-  part(new CylinderGeometry(0.07, 0.1, 0.3, 10), 0.23)
-  part(new CylinderGeometry(0.38, 0.16, 0.5, 16), 0.63)
-  part(new BoxGeometry(0.95, 0.08, 0.08), 0.68) // handles
-  trophy.position.set(WIN_PAD.x, s.top + 1.4, WIN_PAD.z)
-  k.g.add(trophy)
+  const pad = winPad(k, WIN_PAD.x, WIN_PAD.z, s.top, ZONE6_WIN)
+  paidPad(k, WIN_PAD.x, WIN_PAD.z - WIN_PAD.size - 1, s.top, '+50 Wins')
 
   // The x1.6 Hair treadmill: runs like the Hub's, console to the north (the corridor).
   const treadmill = buildTreadmill(k.g, k.addCollider, {
@@ -389,7 +374,7 @@ function buildSummit(k) {
   for (const sx of [-1, 1]) k.mesh(new BoxGeometry(0.4, DOOR.h, 0.3), m.orange, CX + sx * (DOOR.half + 0.2), s.top + DOOR.h / 2, s.z1 + 0.15, { cast: false })
   k.mesh(new BoxGeometry(DOOR.half * 2 + 1.6, DOOR.band, 0.4), k.std('#ff3d10', { emissive: '#c02000', emissiveIntensity: 0.4 }), CX, s.top + DOOR.h + DOOR.band / 2, s.z1 + 0.2, { cast: false })
   for (const sx of [-1, 1]) lantern(k, CX + sx * 4.2, s.z1 + 1.6, s.top + 2.4, s.top, 1.6, material(k).orange)
-  return { trophy, treadmill }
+  return { pad, treadmill }
 }
 
 export function buildZone6(scene, addCollider) {
@@ -401,15 +386,13 @@ export function buildZone6(scene, addCollider) {
   const goo = buildShell(k)
   buildApproach(k)
   const ring = buildTowers(k)
-  const { trophy, treadmill } = buildSummit(k)
+  const { pad, treadmill } = buildSummit(k)
 
   label(g, [
     { text: 'RECOMMENDED', size: 0.45, fill: ['#ffe27a', '#ffb000'], stroke: '#4a2a00' },
     { text: 'LEVEL 52', size: 1, fill: '#ffffff', stroke: '#0a2a3a' },
   ], [CX, FLOOR + 6, START.z1 - 2], { unit: 2.2 })
   label(g, [{ text: `🏆 +${ZONE6_BONUS} Win`, size: 0.5, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [RING.x, RING.y + RING.radius + 0.6, RING.z], { unit: 1.2 })
-  label(g, [{ text: `+${ZONE6_WIN} Wins`, size: 0.7, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [WIN_PAD.x, SUMMIT.top + 2.6, WIN_PAD.z], { unit: 1.4 })
-  label(g, [{ text: '+50 Wins', size: 0.7, fill: ['#d6fbff', '#3fd8ff'], stroke: '#0a3a5a' }], [WIN_PAD.x, SUMMIT.top + 0.9, WIN_PAD.z - WIN_PAD.size - 1], { unit: 1.4 })
   label(g, [
     { text: 'RECOMMENDED', size: 0.45, fill: ['#ffe27a', '#ffb000'], stroke: '#4a2a00' },
     { text: 'LEVEL 58', size: 1, fill: '#ffffff', stroke: '#2a0a0a' },
@@ -431,16 +414,14 @@ export function buildZone6(scene, addCollider) {
     update(dt, time, p) {
       goo.offset.y = time * 0.03
       ring.position.y = RING.y + Math.sin(time * 2) * 0.12
-      trophy.rotation.y = time * 1.5
-      trophy.position.y = SUMMIT.top + 1.4 + Math.sin(time * 2) * 0.1
+      pad.update(time)
       treadmill.update(dt, time)
       if (inZone(p) && p.y < GOO_Y + 0.15) return 'fell'
       if (!bonus && Math.abs(p.z - RING.z) < RING.reach && Math.hypot(p.x - RING.x, p.y + 0.9 - ring.position.y) < RING.radius) {
         bonus = true
         return 'bonus'
       }
-      const onPad = Math.abs(p.x - WIN_PAD.x) < WIN_PAD.size / 2 && Math.abs(p.z - WIN_PAD.z) < WIN_PAD.size / 2
-      if (!won && onPad && p.y >= SUMMIT.top - 0.05) {
+      if (!won && pad.onPad(p)) {
         won = true
         return 'finish'
       }

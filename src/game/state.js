@@ -56,8 +56,8 @@ export const EVENT_BOOST = { mult: 2, seconds: 300 }
 // Prestige (the Rebirth window's Prestige tab): needs PRESTIGE_REBIRTHS rebirths, PRESTIGE_STEP more each
 // time, and multiplies hair and Wins by 1 + prestiges for good. It resets hair, Wins, rebirths, upgrades,
 // treadmills, hair colours (skins) and trails; charms, cuts, auras and the day streak stay.
-export const PRESTIGE_REBIRTHS = 10
-export const PRESTIGE_STEP = 5
+export const PRESTIGE_REBIRTHS = 40
+export const PRESTIGE_STEP = 40
 // What reaching each prestige unlocks (the items carry `prestige: n`). Index 0 is Prestige 1.
 export const PRESTIGE_PRIZES = [
   [{ kind: 'skin', id: 'prestigeGold' }, { kind: 'charm', id: 'prestigeStar' }, { kind: 'slot' }],
@@ -103,6 +103,7 @@ const fresh = () => ({
   quest: 0,
   tutorial: 0, // new-player tutorial step (tutorial.js); TUTORIAL.done = finished
   bestHair: 3,
+  stageReached: 0, // furthest teleport stage index the player has walked into; later stages stay locked until then
   giftAt: 0, // ms timestamp the daily gift was last claimed
   boostUntil: 0, // ms timestamp the event boost runs out
   flags: { treadmill: false, portal: false, starter: false, x2: false },
@@ -173,6 +174,13 @@ export function addHair(n) {
 export function skipQuest() {
   if (state.quest >= QUESTS.length) return
   state.quest++
+  changed()
+}
+
+// Called every frame with the stage the player stands in; only a new furthest stage is saved.
+export function reachStage(i) {
+  if (i <= state.stageReached) return
+  state.stageReached = i
   changed()
 }
 

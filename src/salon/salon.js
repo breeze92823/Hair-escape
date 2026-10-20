@@ -5,7 +5,8 @@
 //
 // Opening moves the avatar layer into the salon scene and main.js renders that scene
 // with this module's camera instead of stepping the world; closing moves it back. The
-// world is left exactly as it was (the player's position never changes).
+// world is left exactly as it was (the player's position never changes). Both swaps run
+// behind the salon doors (doors.js): they shut, the scene changes, they open.
 //
 // Camera: each tab has a framing (SALON.views) the camera glides to; < / > orbit,
 // - / + zoom, VIEW hides the menus; dragging the 3D view orbits, the wheel / a pinch
@@ -15,6 +16,7 @@ import { Vector3 } from 'three'
 import { SALON, clamp } from '../config.js'
 import { buildSalonRoom } from './room.js'
 import { createSalonUi } from './salonUi.js'
+import { createSalonDoors } from './doors.js'
 
 const CAM = SALON.camera
 const TAU = Math.PI * 2
@@ -24,10 +26,11 @@ const NOTCH_PER_DELTA = [1 / 100, 1 / 3, 1] // wheel notches per WheelEvent.delt
 const ZOOM_MIN = 0.3 // user zoom factors on the tab's boom (the boom is also clamped to CAM's distances)
 const ZOOM_MAX = 3
 
-export function createSalon({ renderer, camera, layer, worldScene, toast, onToggle }) {
+export function createSalon({ renderer, camera, layer, worldScene, toast, error, onToggle }) {
   let room = null // built on first open
   let active = false
   let switched = false // the avatar layer changed scenes this frame (the hair re-lays)
+  const doors = createSalonDoors()
 
   // Orbit: user offsets on top of the tab's view; `cur` glides to `goal`.
   const user = { yaw: 0, pitch: 0, zoom: 1 }
@@ -62,6 +65,7 @@ export function createSalon({ renderer, camera, layer, worldScene, toast, onTogg
 
   const ui = createSalonUi({
     toast,
+    error,
     onClose: () => close(),
     onTab: () => resetUser(),
     onOrbit: (dir) => (user.yaw += dir * CAM.orbitStep),
@@ -110,14 +114,24 @@ export function createSalon({ renderer, camera, layer, worldScene, toast, onTogg
     user.zoom = clamp(user.zoom * Math.exp(notches * CAM.wheelZoom), ZOOM_MIN, ZOOM_MAX)
   }, { passive: true })
 
+  // Opening and closing run behind the salon doors: the swap happens once they are shut.
   function open(tab = 'styles') {
+    if (active || doors.busy) return
+    if (document.pointerLockElement) document.exitPointerLock?.()
+    doors.run(() => enter(tab))
+  }
+  function close() {
+    if (!active || doors.busy) return
+    doors.run(leave)
+  }
+
+  function enter(tab) {
     if (active) return
     room ??= buildSalonRoom()
     active = true
     switched = true
     room.scene.add(layer)
     document.body.classList.add('salon-open')
-    if (document.pointerLockElement) document.exitPointerLock?.()
     pointers.clear()
     resetUser()
     ui.open(tab)
@@ -126,7 +140,7 @@ export function createSalon({ renderer, camera, layer, worldScene, toast, onTogg
     onToggle?.(true)
   }
 
-  function close() {
+  function leave() {
     if (!active) return
     active = false
     switched = true

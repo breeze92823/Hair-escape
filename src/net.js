@@ -8,7 +8,7 @@ import { authState, getEquippedAvatar, getProportions, getSkinTextureUrl, sdk, s
 import { hydrate, onChange, setTutorialReady, state, visibleHair } from './game/state.js'
 
 // The keys the server persists (backend src/sanitize.ts); `lastSeen` is stamped when sending.
-const SAVED = ['hair', 'level', 'xp', 'wins', 'rebirths', 'prestige', 'upgrades', 'equipped', 'owned', 'spinAt', 'chests', 'quest', 'tutorial', 'bestHair', 'giftAt', 'boostUntil', 'flags', 'cut', 'charms', 'aura', 'trail', 'lengthPick', 'days', 'lastDay']
+const SAVED = ['hair', 'level', 'xp', 'wins', 'rebirths', 'prestige', 'upgrades', 'equipped', 'owned', 'spinAt', 'chests', 'quest', 'tutorial', 'bestHair', 'stageReached','giftAt', 'boostUntil', 'flags', 'cut', 'charms', 'aura', 'trail', 'lengthPick', 'days', 'lastDay']
 const AVATAR_MAX = 3000 // backend AVATAR_MAX_LEN
 
 export const net = {
