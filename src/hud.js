@@ -1157,6 +1157,7 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       set('quest', `${tutorial}|${warn}|${index}|${text}|${hint}`, () => {
         const done = index >= total
         quest.classList.toggle('done', done)
+        quest.style.display = done && !tutorial ? 'none' : '' // all quests finished: free the view of the player
         quest.classList.toggle('tutorial', tutorial)
         quest.classList.toggle('warn', warn)
         quest.querySelector('.skip').textContent = tutorial ? 'Skip tutorial' : 'Skip'

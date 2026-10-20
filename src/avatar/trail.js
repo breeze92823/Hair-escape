@@ -3,9 +3,15 @@
 // TRAIL_FX.life. One mesh, one draw call: a ring buffer of samples, each drawn as a
 // vertical edge (hip to shoulder) with its colour and alpha from its age.
 // The salon has no running: it feeds the ribbon a point circling the pedestal so
-// the trail can be previewed.
+// the trail can be previewed. Other players get their own ribbons (remotePlayers.js), all
+// sharing one material.
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Mesh, MeshBasicMaterial } from 'three'
 import { TRAILS } from '../game/cosmetics.js'
+
+export const TRAIL_MIN_SPEED = 1.5 // m/s the run trail starts streaming at
+
+let material = null
+const trailMaterial = () => (material ??= new MeshBasicMaterial({ vertexColors: true, transparent: true, side: DoubleSide, depthWrite: false }))
 
 const TRAIL_FX = {
   samples: 40, // ring buffer size
@@ -43,7 +49,7 @@ export function createTrail(parent) {
   geometry.setAttribute('color', new BufferAttribute(colors, 4))
   geometry.setIndex(new BufferAttribute(index, 1))
   geometry.setDrawRange(0, 0)
-  const mesh = new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true, transparent: true, side: DoubleSide, depthWrite: false }))
+  const mesh = new Mesh(geometry, trailMaterial())
   mesh.frustumCulled = false
   mesh.renderOrder = 2
   parent.add(mesh)
@@ -86,9 +92,17 @@ export function createTrail(parent) {
 
   return {
     mesh,
+    get on() {
+      return def !== null
+    },
+    // Frees the ribbon's buffers (the shared material stays).
+    dispose() {
+      mesh.parent?.remove(mesh)
+      geometry.dispose()
+    },
     // id: a TRAILS id ('none' hides it).
     set(id) {
-      const next = id && id !== 'none' ? TRAILS[id] : null
+      const next = (id && id !== 'none' && TRAILS[id]) || null
       if (next === def) return
       def = next
       count = 0
