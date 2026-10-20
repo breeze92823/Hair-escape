@@ -30,6 +30,7 @@ import { buildZone12, ZONE12_BONUS, ZONE12_SPAWN, ZONE12_WIN, ZONE12_Z0 } from '
 import { buildZone13, ZONE13_BONUS, ZONE13_SPAWN, ZONE13_WIN, ZONE13_Z0 } from './zone13.js'
 import { buildZone14, ZONE14_BONUS, ZONE14_SPAWN, ZONE14_WIN, ZONE14_Z0 } from './zone14.js'
 import { createHud } from './hud.js'
+import { createLoginButton } from './login.js'
 import { createHairCable } from './hairCable.js'
 import { createSpeedFx } from './speedFx.js'
 import { installClickSound, playLevelUp, playSfx } from './sfx.js'
@@ -314,6 +315,8 @@ async function loadAvatar() {
   setAvatar(group, equipped)
   syncAvatar() // tell the other players what we look like now
 }
+
+createLoginButton()
 
 let signedIn = null
 bloxity.subscribeAuth((s) => {
