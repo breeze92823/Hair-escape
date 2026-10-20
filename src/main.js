@@ -11,7 +11,7 @@ import { applyProportions, attachEquippedAccessories } from './avatar/loader.js'
 import { disposeAnimator, makeAnimator } from './avatar/animator.js'
 import { attachHair, createHairRope, setGrownLength, setHairColor, setHairCut, setHairLength, setTrailLength } from './avatar/hair.js'
 import { createAdornments } from './avatar/adornments.js'
-import { createTrail } from './avatar/trail.js'
+import { TRAIL_MIN_SPEED, createTrail } from './avatar/trail.js'
 import { isEquipped } from './avatar/cdn.js'
 import { addCollider } from './colliders.js'
 import { buildLobby } from './lobby/lobby.js'
@@ -30,6 +30,7 @@ import { buildZone12, ZONE12_BONUS, ZONE12_SPAWN, ZONE12_WIN, ZONE12_Z0 } from '
 import { buildZone13, ZONE13_BONUS, ZONE13_SPAWN, ZONE13_WIN, ZONE13_Z0 } from './zone13.js'
 import { buildZone14, ZONE14_BONUS, ZONE14_SPAWN, ZONE14_WIN, ZONE14_Z0 } from './zone14.js'
 import { createHud } from './hud.js'
+import { createLoginButton } from './login.js'
 import { createHairCable } from './hairCable.js'
 import { createSpeedFx } from './speedFx.js'
 import { installClickSound, playLevelUp, playSfx } from './sfx.js'
@@ -315,6 +316,8 @@ async function loadAvatar() {
   syncAvatar() // tell the other players what we look like now
 }
 
+createLoginButton()
+
 let signedIn = null
 bloxity.subscribeAuth((s) => {
   const now = !!s.user
@@ -530,7 +533,6 @@ function updateInteraction() {
 }
 
 // --- Loop -------------------------------------------------------------------
-const TRAIL_MIN_SPEED = 1.5 // m/s the run trail starts streaming at
 const clock = new Clock()
 let time = 0
 let wasFlying = false
@@ -634,7 +636,7 @@ renderer.setAnimationLoop(() => {
   hairRope.update(dt, hair, jumped, player.facing, player.position.y, cable)
   adornments.update(dt, hairRope, player.facing)
   runTrail.update(dt, player.position.x, player.position.y, player.position.z, player.facing, speed > TRAIL_MIN_SPEED, jumped)
-  sendPose(player, speed)
+  sendPose(player, speed, cable)
   remotePlayers.update(dt, player.position)
 
   updateCamera(camera, dt)

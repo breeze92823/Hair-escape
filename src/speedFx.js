@@ -18,8 +18,10 @@ const CSS = `
 
 const lerp = (a, b, t) => a + (b - a) * t
 
-// Soft round glow for the character, painted once.
+// Soft round glow for the character, painted once and shared by every glow sprite.
+let glowMap = null
 function glowTexture() {
+  if (glowMap) return glowMap
   const c = document.createElement('canvas')
   c.width = c.height = 64
   const g = c.getContext('2d')
@@ -29,7 +31,16 @@ function glowTexture() {
   grad.addColorStop(1, 'rgba(60,160,255,0)')
   g.fillStyle = grad
   g.fillRect(0, 0, 64, 64)
-  return new CanvasTexture(c)
+  return (glowMap = new CanvasTexture(c))
+}
+
+// A hidden glow sprite (opacity 0) on the shared texture: the local rider's, and each zipping
+// remote player's (remotePlayers.js). Scale it to SPEED_FX.glowSize and fade it by opacity.
+export function createGlowSprite() {
+  const glow = new Sprite(new SpriteMaterial({ map: glowTexture(), blending: AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 }))
+  glow.scale.setScalar(SPEED_FX.glowSize)
+  glow.visible = false
+  return glow
 }
 
 // `playerGroup` carries the glow; `height` is the player's height in m.
@@ -75,10 +86,8 @@ export function createSpeedFx(playerGroup, height) {
   window.addEventListener('resize', resize)
   window.addEventListener('orientationchange', resize)
 
-  const glow = new Sprite(new SpriteMaterial({ map: glowTexture(), blending: AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 }))
-  glow.scale.setScalar(SPEED_FX.glowSize)
+  const glow = createGlowSprite()
   glow.position.y = height * 0.5
-  glow.visible = false
   playerGroup.add(glow)
 
   let intensity = 0

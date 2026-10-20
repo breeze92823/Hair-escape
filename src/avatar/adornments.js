@@ -4,10 +4,13 @@
 // its sample() (avatar/hair.js), so they follow it onto the floor, round corners and
 // out along the hair cable.
 //
-// Charm models are small procedural pieces built once per charm and cached; each is
-// authored in metres for the rope's root width with its local +Y along the hair. The
-// aura is two InstancedMeshes (rings, beads): two draw calls whatever the hair length.
+// Charm models are small procedural pieces built once per charm (a shared prototype) and
+// cloned per wearer, so the local player and every other player (remotePlayers.js) share
+// their geometry and materials; each is authored in metres for the rope's root width with
+// its local +Y along the hair. The aura is two InstancedMeshes (rings, beads) on shared
+// geometry: two draw calls whatever the hair length.
 import {
+  BufferGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
@@ -27,6 +30,7 @@ import {
   TorusGeometry,
   Vector3,
 } from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { AURAS, CHARM_SLOTS, CHARMS } from '../game/cosmetics.js'
 
 const CHARM_AT = { top: 0.32, middle: 0.5, bonus: 0.75, tip: -0.06 } // m from the root (top), fraction of the length (middle, bonus), m from the tip (negative)
@@ -243,19 +247,60 @@ const MODELS = {
   },
 }
 
-export function createAdornments(parent) {
+// A charm model as built is many small meshes (pearls: 34). Bake it into one merged mesh per
+// distinct material look, so a worn charm costs a draw call or two however detailed it is.
+function bake(model) {
+  model.updateMatrixWorld(true)
+  const byLook = new Map() // material look -> { material, geometries }
+  const sources = new Set()
+  model.traverse((m) => {
+    if (!m.isMesh) return
+    const mat = m.material
+    const look = [mat.color.getHex(), mat.emissive.getHex(), mat.emissiveIntensity, mat.metalness, mat.roughness, mat.transparent, mat.opacity, mat.side, mat.flatShading].join()
+    if (!byLook.has(look)) byLook.set(look, { material: mat, geometries: [] })
+    else if (byLook.get(look).material !== mat) mat.dispose()
+    sources.add(m.geometry)
+    const flat = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()
+    const g = new BufferGeometry() // position + normal only, so every piece merges
+    g.setAttribute('position', flat.getAttribute('position'))
+    g.setAttribute('normal', flat.getAttribute('normal'))
+    byLook.get(look).geometries.push(g.applyMatrix4(m.matrixWorld))
+  })
+  for (const geo of sources) geo.dispose()
+  const out = new Group()
+  for (const { material, geometries } of byLook.values()) out.add(new Mesh(mergeGeometries(geometries), material))
+  out.userData.spin = !!model.userData.spin
+  return out
+}
+
+const prototypes = new Map() // charm id -> baked Group, never shown itself
+const charmPrototype = (id) => {
+  let g = prototypes.get(id)
+  if (!g) {
+    const c = CHARMS[id]
+    prototypes.set(id, (g = bake(MODELS[c.model](c.colors))))
+  }
+  return g
+}
+let auraGeo = null
+const auraGeometry = () => (auraGeo ??= { ring: new TorusGeometry(AURA.radius, AURA.tube, 8, 40), bead: new SphereGeometry(AURA.beadSize, 10, 8) })
+
+// scale: size of the charms and aura rings (another player's strand is thinner than the
+// local rope); shadows: whether the charms cast them.
+export function createAdornments(parent, { scale = 1, shadows = true } = {}) {
   const root = new Group()
   root.name = 'hair_adornments'
   parent.add(root)
 
   // --- Charms ---------------------------------------------------------------
-  const built = new Map() // charm id -> Group
+  const built = new Map() // charm id -> this wearer's clone
   const worn = { top: null, middle: null, tip: null } // slot -> Group on show
   const charmFor = (id) => {
+    if (!CHARMS[id]) return null
     if (!built.has(id)) {
-      const c = CHARMS[id]
-      const g = MODELS[c.model](c.colors)
-      g.traverse((m) => (m.castShadow = !!m.isMesh))
+      const g = charmPrototype(id).clone() // shares the prototype's geometry and materials
+      g.scale.setScalar(scale)
+      g.traverse((m) => (m.castShadow = shadows && !!m.isMesh))
       built.set(id, g)
     }
     return built.get(id)
@@ -264,8 +309,8 @@ export function createAdornments(parent) {
   // --- Aura -------------------------------------------------------------------
   const ringMat = new MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false })
   const beadMat = new MeshBasicMaterial({ color: '#ffffff' })
-  const rings = new InstancedMesh(new TorusGeometry(AURA.radius, AURA.tube, 8, 40), ringMat, AURA.maxRings)
-  const beads = new InstancedMesh(new SphereGeometry(AURA.beadSize, 10, 8), beadMat, AURA.maxRings * AURA.beads)
+  const rings = new InstancedMesh(auraGeometry().ring, ringMat, AURA.maxRings)
+  const beads = new InstancedMesh(auraGeometry().bead, beadMat, AURA.maxRings * AURA.beads)
   for (const m of [rings, beads]) {
     m.instanceMatrix.setUsage(DynamicDrawUsage)
     m.frustumCulled = false
@@ -300,6 +345,18 @@ export function createAdornments(parent) {
 
   return {
     root,
+    // Anything on show: a charm in any slot, or an aura.
+    get wearing() {
+      return !!aura || CHARM_SLOTS.some((slot) => worn[slot])
+    },
+    // Frees this wearer's instance buffers and materials (the shared geometry stays).
+    dispose() {
+      root.parent?.remove(root)
+      rings.dispose()
+      beads.dispose()
+      ringMat.dispose()
+      beadMat.dispose()
+    },
     // The worn charms: { top, middle, tip, bonus } of CHARMS ids (or null).
     setCharms(charms) {
       for (const slot of CHARM_SLOTS) {
@@ -354,14 +411,14 @@ export function createAdornments(parent) {
         rope.sample(((i + 0.5) / n) * len, pos, tan)
         q.setFromUnitVectors(UP, tan).multiply(spinQ.setFromAxisAngle(UP, time * AURA.spin * (i % 2 ? -1 : 1) + i))
         // The torus lies in its XY plane: turn it to ring the hair (axis +Y).
-        const breathe = 1 + Math.sin(time * 3 + i * 1.7) * AURA.pulse
+        const breathe = (1 + Math.sin(time * 3 + i * 1.7) * AURA.pulse) * scale
         m4.compose(pos, q, scl.set(breathe, breathe, breathe))
         rings.setMatrixAt(i, local.makeRotationX(Math.PI / 2).premultiply(m4))
         if (aura.ring === 'rainbow') rings.setColorAt(i, hue.setHSL((time * 0.25 + i / n) % 1, 0.9, 0.6))
         for (let j = 0; j < AURA.beads; j++) {
           const a = (j / AURA.beads) * Math.PI * 2
           tmp.set(Math.cos(a) * AURA.radius, 0, Math.sin(a) * AURA.radius).applyMatrix4(m4)
-          beads.setMatrixAt(i * AURA.beads + j, local.makeTranslation(tmp.x, tmp.y, tmp.z))
+          beads.setMatrixAt(i * AURA.beads + j, local.makeScale(scale, scale, scale).setPosition(tmp))
         }
       }
       rings.instanceMatrix.needsUpdate = true

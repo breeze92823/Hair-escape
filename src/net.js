@@ -1,8 +1,10 @@
 // Colyseus link to Hair-escape-backend (room "world"): loads/saves the persisted half of `state`,
-// relays this player's pose / hair look / avatar, and exposes the other players and the leaderboards.
+// relays this player's pose (with the hair cable) / hair look / avatar, and exposes the other players
+// and the leaderboards.
 // Never throws and never blocks play: with no server (or an unreachable one) the game simply runs
 // offline on local state.
 import { Client } from '@colyseus/sdk'
+import { Vector3 } from 'three'
 import { DEV_MODE, GAME_SLUG, NET, SERVER_URL } from './config.js'
 import { authState, getEquippedAvatar, getProportions, getSkinTextureUrl, sdk, subscribeAuth } from './bloxity.js'
 import { hydrate, onChange, setTutorialReady, state, visibleHair } from './game/state.js'
@@ -112,16 +114,27 @@ function send(type, payload) {
   }
 }
 
+// The hair cable's state on the wire (server PlayerState.cable); remotePlayers.js draws it.
+export const CABLE_CODE = { idle: 0, flying: 1, riding: 2, retracting: 3 }
+
 let lastPose = ''
 let lastPoseAt = 0
-// Throttled to NET.poseHz; skips repeats while standing still.
-export function sendPose(player, speed, pose = null) {
+const cableEnd = new Vector3()
+// Throttled to NET.poseHz; skips repeats while standing still. `cable` (hairCable.js) adds its
+// state and the far end of the visible rope while it is out.
+export function sendPose(player, speed, cable = null, pose = null) {
   if (!net.connected) return
   const now = performance.now()
   if (now - lastPoseAt < 1000 / NET.poseHz) return
   lastPoseAt = now
   const r = (n) => Math.round(n * 100) / 100
-  const msg = { x: r(player.position.x), y: r(player.position.y), z: r(player.position.z), yaw: r(player.facing), speed01: r(Math.min(1, speed / player.moveSpeed)), grounded: player.grounded, pose }
+  const msg = { x: r(player.position.x), y: r(player.position.y), z: r(player.position.z), yaw: r(player.facing), speed01: r(Math.min(1, speed / player.moveSpeed)), grounded: player.grounded, pose, cable: 0 }
+  if (cable?.endPoint(cableEnd)) {
+    msg.cable = CABLE_CODE[cable.state] ?? 0
+    msg.tx = r(cableEnd.x)
+    msg.ty = r(cableEnd.y)
+    msg.tz = r(cableEnd.z)
+  }
   const key = JSON.stringify(msg)
   if (key === lastPose) return
   lastPose = key

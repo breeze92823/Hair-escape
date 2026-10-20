@@ -417,6 +417,8 @@ export const NET = {
   hairNearDist: 25, // m: remote players closer than this step their hair at hairNearHz
   hairNearHz: 30, // Hz
   hairFarHz: 10, // Hz: farther remote players' hair (cheaper)
+  cosmeticsDist: 40, // m: remote players closer than this show their charms, aura, run trail and zip glow
+  cableLerp: 14, // 1/s: how fast a remote player's hair cable end eases toward its last relayed point
   nameHeight: 2.9, // m above a remote player's feet the name tag floats
   tutorialWait: 10, // s the tutorial waits for the account's save before starting from the local one
 }
