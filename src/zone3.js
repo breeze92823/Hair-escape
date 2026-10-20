@@ -1,30 +1,31 @@
 // Zone 3: ICE LAKE. Past the Lava Run finish (which doubles as this zone's
 // entrance) a long sunken lake runs north between sheer dark-blue walls,
 // stepped glaciers and tall crystal spikes, with grass terraces, blocky trees
-// and grey mountains beyond. Hop the ice floes to the golden ring on the far
-// platform, under a sandstone fortress that teases the next zone. Falling in
-// the water puts you back on the entrance; the ring awards ZONE3_WIN wins.
-// Procedural like Zone 2 (voxel canvas textures, boxes, cones).
+// and grey mountains beyond. Hop the ice floes to the goal platform, which
+// doubles as the entrance to Zone 4 (the DESERT CANYON, zone4.js): its yellow
+// pad awards ZONE3_WIN wins and the run carries on. Falling in the water puts
+// you back on the entrance. Procedural like Zone 2 (voxel canvas textures,
+// boxes, cones).
 import {
-  BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Group, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, PlaneGeometry, SRGBColorSpace, TorusGeometry,
+  BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Group, Mesh,
+  MeshStandardMaterial, PlaneGeometry, RepeatWrapping, SRGBColorSpace,
 } from 'three'
 import { LAVA_FINISH, buildTree, kit, voxelTexture } from './lavaPath.js'
 import { label } from './lobby/labels.js'
 import { makeCanvas } from './lobby/paint.js'
 
 export const ZONE3_NAME = 'ICE LAKE'
-export const ZONE3_WIN = 5 // wins for reaching the ring (advertised on the entrance trophy)
+export const ZONE3_WIN = 3 // wins for stepping on the goal pad (advertised on the Lava Run trophy)
 // Where a fall into the lake puts you: on the entrance, clear of the win pad.
 export const ZONE3_SPAWN = { x: 1, y: LAVA_FINISH.top + 0.1, z: LAVA_FINISH.z - 1 }
 
 const WATER_Y = 0.12
-const LAKE = { halfW: 22, z0: LAVA_FINISH.z1, z1: -162 } // the water between the walls
+const LAKE = { halfW: 22, z0: LAVA_FINISH.z1, z1: -157 } // the water between the walls; Zone 4's lava starts past it
 const BANK = { x1: 30, top: 3 } // sheer dark-blue walls, snow on top
 const SHELF = { x1: 40, top: 6 } // first ice terrace
 const GLACIER = { x1: 50, top: 9 } // high ice terrace with the tallest spikes
 const OUTER = { x1: 80, top: 7 } // grass beyond, like the Lava Run terraces
-const FAR_Z = -176 // north edge of everything (the fortress backs onto it)
+const FAR_Z = -159 // north edge of the banks (Zone 4's sandstone terraces take over)
 const FLOE_TOP = 1
 
 // The jump path, south to north: [x, z, w, d, top]. Gaps are 2-3.5 m (a flat
@@ -38,10 +39,15 @@ const PATH = [
   [-4, -133, 3.5, 3, FLOE_TOP],
   [1, -140.5, 8, 6, 2],
 ]
-const GOAL = { z0: -147, z1: -157, w: 14, top: 1.6 } // the ice platform under the ring
+const GOAL = { z0: -147, z1: LAKE.z1, w: 14, top: 1.6 } // the ice platform at the end of the lake
 const goalZ = (GOAL.z0 + GOAL.z1) / 2
-const RING = { z: goalZ - 1, y: GOAL.top + 2.6, radius: 1.9 }
-const FORT = { z: LAKE.z1, halfW: 24 } // front face and half-width of the fortress facade
+const PAD = { x: -3.2, size: 3 } // the yellow win pad, left of centre
+const TREAD = { x: 3.6, len: 3.6, w: 2 } // the x1.1 Hair treadmill, right of centre (m)
+const COLUMN_H = 5 // m: the tall ice columns on the canyon-side corners
+const BELT_SPEED = 0.6 // texture repeats/s the treadmill belt drifts
+
+// Zone 4 builds its entrance off the goal platform.
+export const ZONE3_GOAL = { z: goalZ, z0: GOAL.z0, z1: GOAL.z1, w: GOAL.w, top: GOAL.top, padX: PAD.x }
 
 const COL = {
   deep: '#1f52c9',
@@ -53,9 +59,6 @@ const COL = {
   grass: '#7ed321',
   rock: '#4b505c',
   rockTop: '#5c616d',
-  sand: '#e2873b',
-  sandLight: '#f3a85a',
-  sandDark: '#c26626',
 }
 
 function mulberry32(seed) {
@@ -82,9 +85,6 @@ function textures() {
   tex.grass = voxelTexture(COL.grass, { cells: 4, jitter: 0.06, grid: 0.16 })
   tex.rock = voxelTexture(COL.rock, { cells: 4, jitter: 0.08, grid: 0.2 })
   tex.rockTop = voxelTexture(COL.rockTop, { cells: 4, jitter: 0.06, grid: 0.12 })
-  tex.sand = voxelTexture(COL.sand, { cells: 4, jitter: 0.07, grid: 0.2 })
-  tex.sandLight = voxelTexture(COL.sandLight, { cells: 4, jitter: 0.05, grid: 0.14 })
-  tex.sandDark = voxelTexture(COL.sandDark, { cells: 4, jitter: 0.08, grid: 0.22 })
 }
 
 // One material per crystal colour, shared by every spike and shard.
@@ -210,131 +210,84 @@ function buildMountains(k) {
   }
 }
 
-// --- The far end: the goal platform and the fortress ---------------------------
+// --- The far end: the goal platform, which doubles as Zone 4's entrance --------
+// Snow-white ice platform with tall ice columns on the canyon-side corners, the
+// yellow win pad (a trophy spinning over it) on the left, an ice throne behind
+// it, and a decorative x1.1 Hair treadmill on the right.
+function stripeTexture() {
+  const c = makeCanvas(64, 16)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#1d2433'
+  ctx.fillRect(0, 0, 64, 16)
+  ctx.fillStyle = '#e8f2ff'
+  for (let x = 4; x < 64; x += 16) ctx.fillRect(x, 0, 6, 16)
+  const t = new CanvasTexture(c)
+  t.wrapS = t.wrapT = RepeatWrapping
+  t.colorSpace = SRGBColorSpace
+  return t
+}
+
 function buildGoal(k) {
   const d = GOAL.z0 - GOAL.z1
   k.voxBox({ x: 0, z: goalZ, w: GOAL.w, d, y1: GOAL.top - 0.7, side: tex.deep, cell: 1.4, collide: false })
   k.voxBox({ x: 0, z: goalZ, w: GOAL.w, d, y0: GOAL.top - 0.7, y1: GOAL.top, side: tex.ice, top: tex.floeTop, cell: 1.4, collide: false })
   k.addCollider(0, goalZ, GOAL.w, d, GOAL.top)
 
-  // Low ice pillars on the corners, two taller ones flanking the ring.
-  const pillar = (x, z, h) => {
-    k.voxBox({ x, z, w: 1, d: 1, y0: GOAL.top, y1: GOAL.top + h, side: tex.ice, cell: 1 })
-    k.voxBox({ x, z, w: 1.2, d: 1.2, y0: GOAL.top + h, y1: GOAL.top + h + 0.3, side: tex.snow, cell: 1, collide: false })
+  // Low ice pillars on the lake-side corners, tall snow-capped columns on the canyon side.
+  const pillar = (x, z, w, h) => {
+    k.voxBox({ x, z, w, d: w, y0: GOAL.top, y1: GOAL.top + h, side: tex.ice, cell: 1 })
+    k.voxBox({ x, z, w: w + 0.3, d: w + 0.3, y0: GOAL.top + h, y1: GOAL.top + h + 0.4, side: tex.snow, cell: 1, collide: false })
   }
   for (const sx of [-1, 1]) {
-    for (const z of [GOAL.z0 - 0.9, GOAL.z1 + 0.9]) pillar(sx * (GOAL.w / 2 - 0.9), z, 1.4)
-    pillar(sx * 3.2, RING.z, 3.2)
+    pillar(sx * (GOAL.w / 2 - 0.6), GOAL.z0 - 0.6, 1, 1.4)
+    pillar(sx * (GOAL.w / 2 - 1.1), GOAL.z1 + 1.1, 2.2, COLUMN_H)
   }
 
+  // Win pad and the trophy spinning over it.
+  k.mesh(new BoxGeometry(PAD.size + 0.3, 0.08, PAD.size + 0.3), k.std('#d9a400'), PAD.x, GOAL.top + 0.04, goalZ, { cast: false })
   k.mesh(
-    new CylinderGeometry(RING.radius, RING.radius, 0.1, 40),
-    k.std('#ffc21a', { emissive: '#ffb000', emissiveIntensity: 0.5, roughness: 0.35 }),
-    0, GOAL.top + 0.05, RING.z, { cast: false },
+    new BoxGeometry(PAD.size, 0.12, PAD.size),
+    k.std('#ffe11a', { emissive: '#ffc400', emissiveIntensity: 0.45, roughness: 0.4 }),
+    PAD.x, GOAL.top + 0.06, goalZ, { cast: false },
   )
-  // Upright, facing south down the lake (a torus lies in the XY plane).
-  const ring = new Mesh(new TorusGeometry(RING.radius, 0.2, 12, 48), k.std('#ffd21a', { emissive: '#ffb000', emissiveIntensity: 0.6, roughness: 0.3 }))
-  ring.position.set(0, RING.y, RING.z)
-  ring.castShadow = true
-  k.g.add(ring)
-  return ring
+  const gold = k.std('#ffcf1f', { emissive: '#d99a00', emissiveIntensity: 0.35, roughness: 0.3, metalness: 0.4 })
+  const trophy = new Group()
+  const part = (geo, y) => {
+    const m = new Mesh(geo, gold)
+    m.position.y = y
+    m.castShadow = true
+    trophy.add(m)
+  }
+  part(new BoxGeometry(0.55, 0.16, 0.55), 0)
+  part(new CylinderGeometry(0.07, 0.1, 0.3, 10), 0.23)
+  part(new CylinderGeometry(0.38, 0.16, 0.5, 16), 0.63)
+  part(new BoxGeometry(0.95, 0.08, 0.08), 0.68) // handles
+  trophy.position.set(PAD.x, GOAL.top + 1.4, goalZ)
+  k.g.add(trophy)
+
+  // Ice throne behind the pad, facing back down the lake.
+  const tx = PAD.x - 2.2
+  const tz = goalZ - 2.6
+  k.voxBox({ x: tx, z: tz, w: 1.6, d: 1.4, y0: GOAL.top, y1: GOAL.top + 0.9, side: tex.ice, top: tex.snow, cell: 0.8 })
+  k.voxBox({ x: tx, z: tz - 0.55, w: 1.6, d: 0.35, y0: GOAL.top + 0.9, y1: GOAL.top + 2.6, side: tex.ice, top: tex.snow, cell: 0.8, collide: false })
+  for (const s of [-1, 1]) k.voxBox({ x: tx + s * 0.72, z: tz, w: 0.25, d: 1.2, y0: GOAL.top + 0.9, y1: GOAL.top + 1.4, side: tex.snow, cell: 0.5, collide: false })
+
+  // x1.1 Hair treadmill (decoration): light-blue frame, striped belt drifting toward +X.
+  const frame = k.std('#7cc4f5', { roughness: 0.5 })
+  k.mesh(new BoxGeometry(TREAD.len + 0.4, 0.3, TREAD.w + 0.3), frame, TREAD.x, GOAL.top + 0.15, goalZ)
+  k.addCollider(TREAD.x, goalZ, TREAD.len + 0.4, TREAD.w + 0.3, GOAL.top + 0.32)
+  const belt = stripeTexture()
+  belt.repeat.set(TREAD.len / 1.2, 1)
+  k.mesh(new BoxGeometry(TREAD.len, 0.06, TREAD.w - 0.4), new MeshStandardMaterial({ map: belt, roughness: 0.9 }), TREAD.x, GOAL.top + 0.32, goalZ, { cast: false })
+  const console_ = k.std('#2f6fd6', { roughness: 0.45 })
+  const cx = TREAD.x - TREAD.len / 2 - 0.1
+  for (const s of [-1, 1]) k.mesh(new BoxGeometry(0.14, 1.2, 0.14), console_, cx, GOAL.top + 0.9, goalZ + s * (TREAD.w / 2 - 0.1))
+  k.mesh(new BoxGeometry(0.3, 0.4, TREAD.w), console_, cx, GOAL.top + 1.55, goalZ)
+  return { trophy, belt }
 }
 
-// Night-sky gate for the top of the keep: deep purple with stars.
-function portalTexture() {
-  const W = 128
-  const H = 160
-  const c = makeCanvas(W, H)
-  const ctx = c.getContext('2d')
-  const grad = ctx.createLinearGradient(0, 0, 0, H)
-  grad.addColorStop(0, '#12042e')
-  grad.addColorStop(1, '#5a1fa0')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, W, H)
-  const r = mulberry32(77)
-  for (let i = 0; i < 40; i++) {
-    ctx.fillStyle = `rgba(255,255,255,${0.4 + r() * 0.6})`
-    const s = r() < 0.15 ? 3 : 2
-    ctx.fillRect(r() * W, r() * H, s, s)
-  }
-  const t = new CanvasTexture(c)
-  t.colorSpace = SRGBColorSpace
-  return t
-}
-
-// Terracotta sandstone fortress closing the lake: layered blocky towers with
-// purple windows, gold diamonds, cacti and a night-sky gate on top. A facade:
-// only its base is solid.
-function buildFortress(k) {
-  const z0 = FORT.z
-  // A tower set `set` m back from the fortress front, from y0 to y1. Returns its front face z.
-  const tower = (x, w, y1, set, side = tex.sand, y0 = 0) => {
-    k.voxSpan(x - w / 2, x + w / 2, z0 - set, FAR_Z, { y0, y1, side, top: tex.sandLight, cell: 3, collide: y0 === 0, cast: false })
-    return z0 - set
-  }
-  // Merlons along a tower's front edge.
-  const crenellate = (x, w, y, front) => {
-    const n = Math.max(2, Math.round(w / 2))
-    for (let i = 0; i < n; i++) {
-      k.voxBox({ x: x - w / 2 + 0.5 + (i * (w - 1)) / (n - 1), z: front - 0.5, w: 1, d: 1, y0: y, y1: y + 1, side: tex.sandLight, cell: 1, collide: false })
-    }
-  }
-  const windowMat = k.std('#6a3cff', { emissive: '#4a1fd0', emissiveIntensity: 0.6, roughness: 0.4 })
-  const slit = (x, y, front) => k.mesh(new BoxGeometry(1.1, 2, 0.3), windowMat, x, y, front + 0.1, { cast: false })
-  const goldMat = k.std('#ffcf1f', { emissive: '#d99a00', emissiveIntensity: 0.35, roughness: 0.35, metalness: 0.3 })
-  const diamond = (x, y, front, s = 1.3) => {
-    const m = k.mesh(new BoxGeometry(s, s, 0.25), goldMat, x, y, front + 0.1, { cast: false })
-    m.rotation.z = Math.PI / 4
-  }
-  const cactusMat = k.std('#4fa82a', { roughness: 0.85 })
-  const cactus = (x, y, z) => {
-    const h = between(1.6, 2.6)
-    k.mesh(new BoxGeometry(0.6, h, 0.6), cactusMat, x, y + h / 2, z)
-    const arm = between(0.6, 1)
-    k.mesh(new BoxGeometry(0.4, arm, 0.4), cactusMat, x + 0.55, y + h * 0.55 + arm / 2, z)
-    k.mesh(new BoxGeometry(0.5, 0.35, 0.4), cactusMat, x + 0.35, y + h * 0.55, z)
-  }
-
-  // Base wall with a protruding light ledge, a dark doorway and pilasters.
-  const baseFront = tower(0, FORT.halfW * 2, 9, 0)
-  k.voxSpan(-FORT.halfW - 0.5, FORT.halfW + 0.5, z0 + 0.6, z0 - 1.5, { y0: 8.5, y1: 9.4, side: tex.sandLight, cell: 1, collide: false })
-  k.voxBox({ x: 0, z: baseFront + 0.1, w: 5, d: 0.4, y1: 6, side: tex.sandDark, cell: 1, collide: false })
-  for (const x of [-16, -8, 8, 16]) k.voxBox({ x, z: baseFront + 0.25, w: 1.4, d: 0.5, y1: 8.5, side: tex.sandDark, cell: 1, collide: false })
-  for (const x of [-12, -4, 4, 12]) diamond(x, 4.5, baseFront + 0.25)
-  for (const x of [-19, -14, 14, 19]) cactus(x, 9.4, z0 - 0.6)
-
-  for (const s of [-1, 1]) {
-    // Outer towers, with a stepped top.
-    const outer = tower(s * 20, 8, 20, 1)
-    slit(s * 20, 15, outer)
-    tower(s * 20, 5.5, 23, 2.5, tex.sandLight, 20)
-    crenellate(s * 20, 8, 20, outer)
-    cactus(s * 22.6, 20, outer - 0.6)
-    // Side towers.
-    const side = tower(s * 11.5, 9, 30, 3, tex.sandDark)
-    slit(s * 11.5, 22, side)
-    slit(s * 11.5, 26.5, side)
-    diamond(s * 11.5, 17, side)
-    tower(s * 11.5, 6, 34, 4.5, tex.sand, 30)
-    crenellate(s * 11.5, 9, 30, side)
-    k.voxSpan(s * 7, s * 16, side + 0.4, side - 0.4, { y0: 14, y1: 14.8, side: tex.sandLight, cell: 1, collide: false })
-  }
-
-  // Central keep, twin turrets and the night-sky gate between them.
-  const keep = tower(0, 12, 37, 5)
-  for (const x of [-2.5, 2.5]) slit(x, 30, keep)
-  diamond(0, 24, keep, 1.6)
-  diamond(0, 13, keep)
-  k.voxSpan(-6.5, 6.5, keep + 0.4, keep - 0.4, { y0: 20, y1: 20.8, side: tex.sandLight, cell: 1, collide: false })
-  const turretFront = keep - 0.5
-  for (const s of [-1, 1]) tower(s * 4.5, 3.5, 45, 5.5, tex.sandDark, 37)
-  k.voxSpan(-6.25, 6.25, turretFront, turretFront - 3.5, { y0: 43.5, y1: 45.2, side: tex.sandLight, cell: 1, collide: false, cast: false })
-  crenellate(0, 12.5, 45.2, turretFront)
-  const gate = k.mesh(new PlaneGeometry(5.5, 6.5), new MeshBasicMaterial({ map: portalTexture(), toneMapped: false }), 0, 37 + 3.25, turretFront - 0.4, { cast: false })
-  gate.receiveShadow = false
-}
-
-export function buildZone3(scene, addCollider) {
+// `nextWin`: the wins the next zone's finish awards, advertised on the trophy sign.
+export function buildZone3(scene, addCollider, { nextWin = 0 } = {}) {
   const g = new Group()
   scene.add(g)
   const k = kit(g, addCollider)
@@ -343,24 +296,32 @@ export function buildZone3(scene, addCollider) {
   buildLake(k)
   buildBanks(k)
   buildMountains(k)
-  const ring = buildGoal(k)
-  buildFortress(k)
+  const { trophy, belt } = buildGoal(k)
 
   label(g, [
     { text: 'RECOMMENDED', size: 0.45, fill: ['#bff4ff', '#2fd8ff'], stroke: '#0a2a5a' },
     { text: 'LEVEL 16', size: 1, fill: '#ffffff', stroke: '#1b2a4a' },
   ], [0, 3.8, -117], { unit: 1.4 })
+  label(g, [{ text: `+${ZONE3_WIN} Wins`, size: 0.7, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [PAD.x, GOAL.top + 0.75, goalZ + 1.3], { unit: 0.9 })
+  label(g, [{ text: `🏆 +${nextWin} Wins`, size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' }], [PAD.x, GOAL.top + 2.75, goalZ], { unit: 0.9 })
+  label(g, [
+    { text: '[x2 Boost]', size: 0.35, fill: '#ff5a5a', stroke: '#3a0a0a' },
+    { text: 'x1.1 Hair', size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' },
+  ], [TREAD.x, GOAL.top + 2.6, goalZ], { unit: 0.9 })
 
   let won = false
   return {
-    // From the entrance (the Lava Run finish) north. main.js checks this before the Lava Run.
+    // From the entrance (the Lava Run finish) to the goal platform. main.js checks this before the Lava Run.
     contains: (p) => p.z < LAVA_FINISH.z0 && p.z > FAR_Z && Math.abs(p.x) < GLACIER.x1,
     // Returns 'fell' or 'finish' when the player triggers one.
     update(dt, time, p) {
-      ring.position.y = RING.y + Math.sin(time * 2) * 0.15
+      trophy.rotation.y = time * 1.5
+      trophy.position.y = GOAL.top + 1.4 + Math.sin(time * 2) * 0.1
+      belt.offset.x = -time * BELT_SPEED
       const inLake = Math.abs(p.x) < LAKE.halfW && p.z < LAKE.z0 && p.z > LAKE.z1
       if (inLake && p.y < WATER_Y + 0.15) return 'fell'
-      if (!won && Math.hypot(p.x, p.z - RING.z) < RING.radius + 0.4 && p.y >= GOAL.top - 0.05) {
+      const onPad = Math.abs(p.x - PAD.x) < PAD.size / 2 && Math.abs(p.z - goalZ) < PAD.size / 2
+      if (!won && onPad && p.y >= GOAL.top - 0.05) {
         won = true
         return 'finish'
       }

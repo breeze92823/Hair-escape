@@ -80,6 +80,74 @@ export function pushOut(p, radius, height) {
   for (let pass = 0; pass < 2; pass++) for (const fn of pushers) fn(p, radius, height)
 }
 
+// First solid along the ray o + d * t (d unit length) within maxDist: a box face,
+// or the ground plane. Returns { dist, x, y, z, nx, ny, nz, ground, box } or null
+// (`box` is the collider hit, null for the ground).
+// Boxes the origin is already inside are skipped. The hair cable aims with it.
+export function raycast(ox, oy, oz, dx, dy, dz, maxDist) {
+  let best = maxDist
+  let hit = null
+  let nx = 0
+  let ny = 0
+  let nz = 0
+  if (dy < -1e-9) {
+    const t = (GROUND_Y - oy) / dy
+    if (t >= 0 && t < best) {
+      best = t
+      hit = 'ground'
+      ny = 1
+    }
+  }
+  for (const b of boxes) {
+    if (b.off) continue
+    // Ray into box-local coordinates.
+    const rx = ox - b.cx
+    const rz = oz - b.cz
+    const sx = b.cos * rx - b.sin * rz
+    const sz = b.sin * rx + b.cos * rz
+    const vx = b.cos * dx - b.sin * dz
+    const vz = b.sin * dx + b.cos * dz
+    if (Math.abs(sx) <= b.hx && Math.abs(sz) <= b.hz && oy >= b.y0 && oy <= b.y1) continue // starts inside
+    let t0 = 0
+    let t1 = best
+    let axis = -1
+    let sign = 0
+    const axes = [[-b.hx, b.hx, sx, vx], [b.y0, b.y1, oy, dy], [-b.hz, b.hz, sz, vz]]
+    for (let a = 0; a < 3; a++) {
+      const [lo, hi, s, v] = axes[a]
+      if (Math.abs(v) < 1e-9) {
+        if (s < lo || s > hi) { t0 = Infinity; break }
+        continue
+      }
+      let n = (lo - s) / v
+      let f = (hi - s) / v
+      let entrySign = -1 // entering through the low face: its normal points to -axis
+      if (n > f) {
+        [n, f] = [f, n]
+        entrySign = 1
+      }
+      if (n > t0) {
+        t0 = n
+        axis = a
+        sign = entrySign
+      }
+      if (f < t1) t1 = f
+      if (t0 > t1) break
+    }
+    if (axis < 0 || t0 > t1 || t0 >= best) continue
+    best = t0
+    hit = b
+    // Local face normal back to world space (forward Y rotation).
+    const lnx = axis === 0 ? sign : 0
+    const lnz = axis === 2 ? sign : 0
+    nx = b.cos * lnx + b.sin * lnz
+    ny = axis === 1 ? sign : 0
+    nz = -b.sin * lnx + b.cos * lnz
+  }
+  if (!hit) return null
+  return { dist: best, x: ox + dx * best, y: oy + dy * best, z: oz + dz * best, nx, ny, nz, ground: hit === 'ground', box: hit === 'ground' ? null : hit }
+}
+
 // Fraction (0..1] along the segment a -> b where it first enters a solid, or 1 if
 // clear. The chase camera pulls in to this. Boxes whose top is below `minTop` (the
 // walkable lips) are ignored, as is any box the start point is already inside, so

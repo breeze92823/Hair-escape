@@ -118,7 +118,10 @@ function voxelMaterial(tex, rx, ry, extra = {}) {
 
 // Cracked lava: Voronoi cells in reds and oranges, separated by bright yellow
 // seams with a darker rim. Seamless (cells are wrapped across the tile edges).
+// Painted once; Zone 4 clones it (clones share the canvas upload).
+let lavaTex = null
 function lavaTexture() {
+  if (lavaTex) return lavaTex
   const S = 256
   const c = makeCanvas(S)
   const ctx = c.getContext('2d')
@@ -166,6 +169,7 @@ function lavaTexture() {
   t.wrapS = t.wrapT = RepeatWrapping
   t.colorSpace = SRGBColorSpace
   t.anisotropy = 8
+  lavaTex = t
   return t
 }
 
@@ -437,7 +441,7 @@ export function buildLavaPath(scene, addCollider) {
     { text: 'Stay on the path!', size: 0.4, fill: '#ffffff' },
   ], [0, archTop + 2.4, ARCH.z], { unit: 1.6 })
   label(g, [{ text: '+1 Win', size: 0.7, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [PAD.x, TOP + 0.75, finishZ + 1.3], { unit: 0.9 })
-  label(g, [{ text: '🏆 +5 Wins', size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' }], [PAD.x, TOP + 2.75, finishZ], { unit: 0.9 })
+  label(g, [{ text: '🏆 +3 Wins', size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' }], [PAD.x, TOP + 2.75, finishZ], { unit: 0.9 })
   label(g, [{ text: 'x1 Hair', size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' }], [LADDER_X, TOP + 3.1, finishZ], { unit: 0.9 })
 
   let won = false
@@ -465,5 +469,5 @@ export function buildLavaPath(scene, addCollider) {
   }
 }
 
-// Shared with Zone 3, which is built the same way.
-export { buildTree, kit, voxelTexture }
+// Shared with Zones 3 and 4, which are built the same way.
+export { buildTree, kit, lavaTexture, voxelTexture }

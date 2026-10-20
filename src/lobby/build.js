@@ -55,7 +55,7 @@ export function bundleBoard(parent, bundle, bonus, [x, y, z], unit = 1.5) {
       { text: `${left}/${bundle.stock} LEFT`, size: 0.42, fill: '#ffffff', bg: '#2a2b45' },
       owned
         ? { text: '✔ OWNED', size: 0.48, fill: '#ffffff', bg: '#33d11c', border: '#0f4a0a' }
-        : { text: `x${bonus}  ◎ ${formatNumber(bundle.cost)}`, size: 0.48, fill: '#ffffff', bg: '#33d11c', border: '#0f4a0a' },
+        : { text: `x${bonus}  🏆 ${formatNumber(bundle.price)}`, size: 0.48, fill: '#ffffff', bg: '#33d11c', border: '#0f4a0a' },
     ])
   }
 }

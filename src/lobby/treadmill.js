@@ -13,7 +13,7 @@ import { beltTexture, makeCanvas, onFontReady, outlinedText } from './paint.js'
 import { label } from './labels.js'
 
 export const BELT_SPEED = 4.5 // m/s the belt drags the runner away from the console
-export const STEP_TIME = 0.42 // s of running per hair step
+export const STEP_TIME = 1 // s of running per hair step (x1 belt, Golden Hair, no rebirth = 1 hair/s)
 const BELT_TOP = 0.42
 
 export const THEMES = {

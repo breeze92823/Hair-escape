@@ -18,8 +18,8 @@ import { buildLeaderboards } from './leaderboards.js'
 import { buildTreadmill } from './treadmill.js'
 import { buildHairShop, showNearestInfo } from './hairShop.js'
 import {
-  BUNDLE, REBIRTH_LEVEL, canAcquire, canEquip, canRebirth, claimGift, equip, giftAmount, giftReady, GIFT_COOLDOWN, HAIR_STYLES,
-  SPIN_COOLDOWN, SPIN_PRIZES, buy, owns, rebirth, requirementText, spin, spinReady, state as progress,
+  BUNDLE, rebirthLevel, canAcquire, canEquip, canRebirth, claimGift, equip, giftAmount, giftReady, GIFT_COOLDOWN, HAIR_STYLES,
+  SPIN_COOLDOWN, SPIN_PRIZES, buy, owns, rebirth, requirementText, spin, spinReady, state as progress, styleReq,
 } from '../game/state.js'
 import { formatNumber } from './leaderboards.js'
 import { C, add, bundleBoard, clock, slab, std } from './build.js'
@@ -546,13 +546,13 @@ function buildRebirth(g, addCollider) {
         { text: 'REBIRTH', size: 0.9, fill: ['#f2dcff', '#a35bff'], stroke: '#2a0a5a' },
         canRebirth()
           ? { text: 'Press E: +50% Hair forever', size: 0.5, fill: ['#b6ff7a', '#33d11c'] }
-          : { text: `Reach Level ${REBIRTH_LEVEL} (you: ${state.level})`, size: 0.5, fill: '#ffffff' },
+          : { text: `Reach Level ${rebirthLevel()} (you: ${state.level})`, size: 0.5, fill: '#ffffff' },
       ])
     },
     interact: {
       position: { x, y: 1, z },
       radius: 4,
-      prompt: () => (canRebirth() ? ['Rebirth (resets hair & level, +50% hair)', true] : [`Rebirth needs Level ${REBIRTH_LEVEL}`, false]),
+      prompt: () => (canRebirth() ? ['Rebirth (resets hair & level, +50% hair)', true] : [`Rebirth needs Level ${rebirthLevel()}`, false]),
       action: () => rebirth(),
     },
   }
@@ -768,10 +768,10 @@ export function buildLobby(scene, addCollider, { onEvent } = {}) {
         const name = s.style.name
         if (progress.equipped === s.id) return [`${name} is equipped`, false]
         if (canEquip(s.id)) return [`Equip ${name} (+${s.style.bonus} / Hair)`, true]
-        if (canAcquire(s.id)) return s.style.cost != null ? [`Buy ${name} for ${s.style.cost} Hair`, true] : [`Claim ${name} (limited, free!)`, true]
-        if (s.style.cost != null) return [`${name} costs ${s.style.cost} Hair (you have ${progress.hair})`, false]
-        if (s.style.limitedUntil != null) return [`${name} has expired`, false]
-        return [`${name}: ${requirementText(s.id)}${s.style.rebirths ? '' : ' (escape the course!)'}`, false]
+        if (canAcquire(s.id)) return [`Buy ${name} for ${s.style.price} Wins`, true]
+        const req = styleReq(s.id)
+        if (req.type === 'price') return [`${name} costs ${req.value} Wins (you have ${progress.wins}, escape the course!)`, false]
+        return [`${name}: ${requirementText(s.id)}`, false]
       },
       action: () => equip(s.id),
     })),

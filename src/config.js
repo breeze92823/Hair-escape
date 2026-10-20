@@ -6,8 +6,8 @@ export const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true'
 
 // --- World ------------------------------------------------------------------
 export const GROUND_Y = 0
-export const GROUND_SIZE = 400 // square ground centred on the origin
-export const WORLD_BOUNDS = { minX: -195, maxX: 195, minZ: -195, maxZ: 195 }
+export const GROUND_SIZE = 640 // square ground centred on the origin
+export const WORLD_BOUNDS = { minX: -195, maxX: 195, minZ: -380, maxZ: 195 } // north reaches past the back of Zone 5's purple palace (z -375)
 export const SPAWN = { x: 0, y: 0.3, z: 2 } // lobby, on the red carpet facing the START portal
 export const SPAWN_FACING = Math.PI // yaw the character faces on spawn (PI = toward -Z)
 
@@ -20,6 +20,8 @@ export const PHYSICS = {
   gravity: -22, // m/s^2
   jumpSpeed: 7.5, // m/s
   stepUp: 0.6, // m: box tops this far above the feet are walked onto, not collided with
+  climbSpeed: 6, // m/s up a climbing panel while a move key is held
+  climbSlide: 1.5, // m/s max slide down a climbing panel with no key held
   killY: -30, // fell this far below the ground: respawn
 }
 export const PLAYER_DIMS = { radius: 0.4, height: 1.8 }
@@ -66,6 +68,60 @@ export const HAIR = {
   sprintSpeed: 13, // m/s that streams the hair fully backwards
 }
 
+// Hair cable (hairCable.js): Space shoots the hair tip out of the head; while it
+// flies the camera follows it and right-drag (or pointer-lock mouse / touch drag)
+// steers it, until it sticks to a surface or the hair runs out. The player then
+// hangs beneath it and travels the path it took to the anchor.
+// Reach grows with the hair: base + per length point + every metre of floor trail.
+export const GRAPPLE = {
+  baseReach: 8, // m
+  reachPerLength: 2, // m per hair length point
+  maxReach: 45, // m
+  segment: 0.5, // m between stored path points
+  tipSpeed: 12, // m/s the steered tip flies at
+  launchPitch: 0.3, // rad above the horizon the tip leaves at
+  steerSensitivity: 0.003, // rad of aim per pixel of drag
+  steerEase: 4, // 1/s the tip's heading glides onto the aim (lower = softer turns)
+  maxTipPitch: 1.3, // rad up or down the tip can be aimed
+  anchorOffset: 0.05, // m the anchored tip sits off the surface it hit
+  flySway: 0.12, // m sideways the flying strand ripples, mid-length
+  flySwayFreq: 9, // rad/s of that ripple
+  camFollowLerp: 6, // 1/s the camera's focus eases onto the flying tip
+  camReturnLerp: 4, // 1/s it eases back to the player once the tip anchors or runs out
+  camYawLerp: 5, // 1/s the orbit swings round behind the tip's heading
+  camDistance: 2.5, // m boom length while watching the flying tip
+  camPitch: 0.4, // rad the boom is lifted to at least, so it looks down on the strand, not along it
+  retractSpeed: 80, // m/s it reels back in
+  zipStartSpeed: 8, // m/s at the grab
+  zipSpeed: 14, // m/s top speed along the cable
+  zipAccel: 20, // m/s^2
+  hangDrop: 2.2, // m the feet hang below the gripping hands
+  vaultUp: 6, // m/s up at the far end (climbs a ledge the hair draped onto)
+  vaultForward: 4, // m/s onward at the far end
+  stuckTime: 0.5, // s blocked by a wall before the ride gives up
+}
+
+// Speed rush while zipping along the hair cable (speedFx.js): radial streaks, a
+// tinted vignette, a wider FOV, a faint shake and a glow on the player.
+export const SPEED_FX = {
+  fadeIn: 5, // 1/s the effect ramps up as the ride starts
+  fadeOut: 3, // 1/s it clears after letting go
+  baseIntensity: 0.35, // 0..1 at the grab; the rest comes with the ride speed
+  streaks: 70, // streak count on desktop
+  touchStreaks: 36, // on touch-first devices (phones run hot)
+  resolution: 0.5, // overlay canvas pixels per CSS px (thin lines survive low res)
+  clearRadius: 0.28, // fraction of the half-diagonal kept free of streaks round the centre
+  streakSpeed: 2.2, // half-diagonals per second a streak travels outward at full rush
+  streakLength: [0.12, 0.35], // half-diagonals, min..max
+  streakWidth: [1, 3], // overlay px, min..max
+  maxOpacity: 0.75, // streak alpha at full rush
+  vignette: 0.55, // edge tint opacity at full rush
+  fovBoost: 8, // degrees added at full rush (on top of CAMERA.speedFov)
+  shake: 0.035, // m camera jitter at full rush
+  glowOpacity: 0.55, // player glow sprite alpha at full rush
+  glowSize: 3.2, // m across
+}
+
 // --- Camera (camera.js) -------------------------------------------------------
 export const CAMERA = {
   fov: 70,
@@ -86,15 +142,53 @@ export const CAMERA = {
   speedFov: 4, // degrees the FOV widens at full speed
   speedEase: 3, // 1/s the speed framing eases in and out
   clearEase: 4, // 1/s the boom eases back out after a wall pulled it in
-  framingEase: 2.5, // 1/s a zone's framing (setFraming) tilts the view in
 }
 
-// Zone 2, LAVA RUN: the raised over-the-shoulder view looking north down the slabs.
-export const LAVA_RUN = { cameraPitch: 0.62, cameraDistance: 13 }
-// Zone 3, ICE LAKE: high behind the player, looking a few metres past them, so
-// the player sits low in frame and the whole lake, the gold ring and the
-// fortress fit in from the entrance.
-export const ICE_LAKE = { cameraPitch: 0.45, cameraDistance: 15, cameraLookAhead: 6 }
+// Hair Salon (salon/): the dressing room the HUD's Hair button opens. Its own scene
+// round the origin: the player stands on a round pedestal facing +Z (toward the
+// front-view camera), the hair coils round it on the floor. Metres / radians.
+export const SALON = {
+  half: 14, // m, half the room's width and depth
+  height: 10, // m, wall height
+  pedestal: [[3.2, 0.45], [3.75, 0.3], [4.3, 0.15]], // [radius, top height] tiers, top first; the player stands on the first
+  facing: 0, // body yaw (0 = +Z, toward the camera)
+  coil: { straight: 3.5, radius: 4.2, growth: 0.07 }, // floor hair: m straight back off the pedestal, then a spiral of this radius (m) widening by `growth` m per m
+  shadowMapSize: 1024,
+  shadowRange: 9, // m half-width of the salon's shadow box
+  camera: {
+    ease: 5, // 1/s the camera glides between views
+    orbitStep: Math.PI / 4, // rad per < / > press
+    zoomStep: 1.25, // distance factor per - / + press
+    minDistance: 2.5,
+    maxDistance: 15,
+    dragYaw: 0.006, // rad per px of drag
+    dragPitch: 0.004,
+    wheelZoom: 0.12, // distance factor per wheel notch
+    minPitch: -0.05,
+    maxPitch: 1.3,
+    wallMargin: 0.8, // m the camera keeps inside the walls
+    fov: 50, // degrees: a portrait lens, flatter than the world camera
+  },
+  // Per tab: orbit yaw (0 = in front of the player), pitch (rad above the horizon), boom (m) and the look-at point.
+  views: {
+    styles: { yaw: -0.35, pitch: 0.12, distance: 6.5, target: [0, 1.3, 0] },
+    colors: { yaw: Math.PI + 0.6, pitch: 0.32, distance: 7.5, target: [0, 0.9, -1.8] },
+    charms: { yaw: Math.PI * 0.78, pitch: 0.6, distance: 6.5, target: [0.8, 0.4, -3.2] },
+    auras: { yaw: -0.15, pitch: 0.16, distance: 7, target: [0, 1.1, -0.6] },
+    trails: { yaw: 0.35, pitch: 0.2, distance: 7.5, target: [0, 1, 0] },
+    length: { yaw: Math.PI * 0.85, pitch: 0.55, distance: 9.5, target: [1.5, 0.4, -3.5] },
+  },
+}
+
+// Touch controls (touch.js). Screen sizes are CSS px.
+export const TOUCH = {
+  stickRadius: 52, // px the knob travels from the stick's centre at full speed
+  stickZone: 0.45, // left fraction of the screen where a touch starts the move stick
+  deadZone: 0.12, // fraction of stickRadius that still reads as standing still
+  lookScale: 1.3, // camera pixels per finger pixel (CAMERA.lookSensitivity is tuned for a mouse)
+  pinchZoom: 1 / 40, // wheel notches per px the two fingers move apart
+  maxPixelRatio: 1.5, // render resolution cap on touch-first devices: phones at 3x run hot and slow
+}
 
 // SDK setting keys this game listens for (they appear in the portal's settings menu).
 export const SETTINGS = {
@@ -177,7 +271,19 @@ export const ANIM = {
     },
     bobY: -0.2,
   },
-  transitions: { toLocomotion: 0.14, toAirborne: 0.12, toLanding: 0.06 }, // s to blend a pose change
+  // Riding the hair cable: both arms reach up the cable (pitched by its elevation
+  // in animator.js), legs tucked a little.
+  hang: {
+    pose: {
+      ArmL1: { x: deg(-90), z: deg(8) }, ArmR1: { x: deg(-90), z: deg(-8) },
+      ArmL2: { x: deg(6) }, ArmR2: { x: deg(6) },
+      LegL1: { x: deg(-24) }, LegR1: { x: deg(-10) }, LegL2: { x: deg(38) }, LegR2: { x: deg(24) },
+      Spine1: { x: deg(-4) },
+    },
+    swayFrequency: 1.6,
+    swayAmount: deg(6),
+  },
+  transitions: { toLocomotion: 0.14, toAirborne: 0.12, toLanding: 0.06, toHang: 0.1 }, // s to blend a pose change
 }
 
 export function clamp(n, min, max) {
