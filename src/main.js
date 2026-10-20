@@ -1,5 +1,5 @@
 import { Clock, Group, PCFSoftShadowMap, PerspectiveCamera, Scene, SRGBColorSpace, Vector3, WebGLRenderer } from 'three'
-import { ANIM, CAMERA, HAIR, PHYSICS, SPAWN, SPAWN_FACING, TOUCH } from './config.js'
+import { ANIM, CAMERA, HAIR, PHYSICS, SPAWN, SPAWN_FACING, TOUCH, TUTORIAL } from './config.js'
 import * as bloxity from './bloxity.js'
 import { inputState, install as installInput, refreshMove } from './input.js'
 import { install as installTouch } from './touch.js'
@@ -32,13 +32,15 @@ import { buildZone14, ZONE14_BONUS, ZONE14_SPAWN, ZONE14_WIN, ZONE14_Z0 } from '
 import { createHud } from './hud.js'
 import { createHairCable } from './hairCable.js'
 import { createSpeedFx } from './speedFx.js'
-import { installClickSound, playSfx } from './sfx.js'
+import { installClickSound, playLevelUp, playSfx } from './sfx.js'
+import { celebrate } from './party.js'
 import { createCableSfx } from './cableSfx.js'
 import * as game from './game/state.js'
 import { CUTS } from './game/cosmetics.js'
 import { createSalon } from './salon/salon.js'
 import { initNet, net, onHydrated, sendPose, syncAvatar } from './net.js'
 import { createRemotePlayers } from './remotePlayers.js'
+import { createTutorial } from './tutorial.js'
 
 // --- Bloxity + player state -----------------------------------------------
 bloxity.init()
@@ -117,7 +119,7 @@ const runTrail = createTrail(avatarLayer) // the ribbon behind the runner
 // --- HUD + progression ------------------------------------------------------
 const hud = createHud({
   onMenu: bloxity.showMenu,
-  onSkipQuest: () => game.skipQuest(),
+  onSkipQuest: () => (tutorial.active() ? tutorial.skip() : game.skipQuest()),
   onTeleport: (spot) => respawn(spot),
   onOpenSalon: () => salon.open(),
   // Teleport window: one stage per zone (Hub, Lava Run, Ice Lake, Desert Canyon, Purple Palace, Teal Citadel, Amber Halls, Violet Tower, Crystal Cavern, Sky Gardens, Jungle Ruins, Magma Forge, Neon Skyline, Star Summit).
@@ -141,10 +143,7 @@ const hud = createHud({
   // Worlds tab cards: World 2 shows as gated by Prestige 1 (a threshold, not spent); neither it nor World 3 is built yet.
   worlds: [{ name: 'Hairy Heights', spot: SPAWN, art: 'heights' }, { name: 'Wonder Worlds', prestige: 1, art: 'wonder' }, { name: '???', art: 'mystery' }],
   // Hub until the START doorway, Lava Run until its finish ends, Ice Lake until its goal platform, Desert Canyon until its finish platform ends, Purple Palace until its back wall, Teal Citadel until its back wall, Amber Halls until its north end, Violet Tower until its mine deck ends, Crystal Cavern until its back building, then each zone until its exit: Sky Gardens, Jungle Ruins, Magma Forge, Neon Skyline, Star Summit.
-  currentStage: () => {
-    const z = player.position.z
-    return z > HUB_NORTH_Z ? 0 : z > LAVA_FINISH.z1 ? 1 : z > ZONE3_GOAL.z0 ? 2 : z > ZONE5_Z0 ? 3 : z > ZONE6_Z0 ? 4 : z > ZONE7_Z0 ? 5 : z > ZONE8_Z0 ? 6 : z > ZONE9_Z0 ? 7 : z > ZONE10_Z0 ? 8 : z > ZONE11_Z0 ? 9 : z > ZONE12_Z0 ? 10 : z > ZONE13_Z0 ? 11 : z > ZONE14_Z0 ? 12 : 13
-  },
+  currentStage: () => stageHere(),
   onClaimBoost: () => {
     if (game.boostActive()) return
     game.startBoost()
@@ -152,6 +151,10 @@ const hud = createHud({
     hud.chat('<b>[Event]</b> 2x Hair boost active for 5 minutes!')
   },
 })
+function stageHere() {
+    const z = player.position.z
+    return z > HUB_NORTH_Z ? 0 : z > LAVA_FINISH.z1 ? 1 : z > ZONE3_GOAL.z0 ? 2 : z > ZONE5_Z0 ? 3 : z > ZONE6_Z0 ? 4 : z > ZONE7_Z0 ? 5 : z > ZONE8_Z0 ? 6 : z > ZONE9_Z0 ? 7 : z > ZONE10_Z0 ? 8 : z > ZONE11_Z0 ? 9 : z > ZONE12_Z0 ? 10 : z > ZONE13_Z0 ? 11 : z > ZONE14_Z0 ? 12 : 13
+}
 // The Hair Salon (the Hair button): its own scene, camera framing and overlay.
 const salon = createSalon({
   renderer,
@@ -159,6 +162,7 @@ const salon = createSalon({
   layer: avatarLayer,
   worldScene: scene,
   toast: (text, fill) => hud.toast(text, fill),
+  error: (text) => hud.error(text),
   onToggle: (on) => {
     hud.setSalon(on)
     if (on) cable.release(true)
@@ -168,13 +172,32 @@ const playerName = () => {
   const u = bloxity.authState.user
   return (u && (u.displayName || u.username || u.name)) || 'You'
 }
+// The new-player tutorial borrows the quest pill until it is finished or skipped.
+const showQuest = (s) => {
+  const q = game.QUESTS[s.quest]
+  hud.setQuest(s.quest, game.QUESTS.length, q ? q.text : 'All quests done! Keep growing your *hair*!')
+}
+const firstTreadmill = lobby.treadmills[0].center
+const firstStyle = lobby.shopSpot(TUTORIAL.style)
+const tutorial = createTutorial(scene, hud, {
+  targets: {
+    treadmill: { x: firstTreadmill.x, y: firstTreadmill.y - 1, z: firstTreadmill.z },
+    portal: { x: 0, y: 0, z: HUB_NORTH_Z - 2 }, // just past the doorway, where the portal flag trips
+    winPad: { x: LAVA_FINISH.padX, y: LAVA_FINISH.top, z: LAVA_FINISH.z },
+    shop: { x: firstStyle.x, y: firstStyle.y - 1, z: firstStyle.z },
+  },
+  onBelt: () => treadmillRunning,
+  inHub: () => player.position.z > HUB_NORTH_Z,
+  getCable: () => cable,
+  safeAt: (x, y, z) => floorAt(x, z, y + 0.05) >= LAVA_FINISH.top - 0.1, // a Lava Run slab (or higher) underneath, not the lava
+  onEnd: () => showQuest(game.state),
+})
 
 game.onChange((s) => {
   hud.setState(s)
   hud.setHair(s.hair)
   hud.setLevel(s.level, s.xp, game.levelRequirement(s.level))
-  const q = game.QUESTS[s.quest]
-  hud.setQuest(s.quest, game.QUESTS.length, q ? q.text : 'All quests done! Keep growing your *hair*!')
+  if (!tutorial.active()) showQuest(s)
   hud.setStats([
     ['Hair', s.hair.toLocaleString()],
     ['Best Hair', s.bestHair.toLocaleString()],
@@ -198,16 +221,17 @@ game.onChange((s) => {
   lobby.refresh(s, playerName())
   salon.refresh()
 })
-// One sound per celebration: level-ups and rebirths fanfare, rewards chime, spending rings the till.
-const EVENT_SFX = { level: 'levelUp', rebirth: 'levelUp', prestige: 'levelUp', upgrade: 'winClaim', win: 'winClaim', chest: 'winClaim', quest: 'winClaim', buy: 'cash' }
+// One sound per celebration: rebirths fanfare, rewards chime, spending rings the till. A level up
+// plays its own synthesised jingle (playLevelUp) and flashes the level bar.
+const EVENT_SFX = { rebirth: 'levelUp', prestige: 'levelUp', upgrade: 'winClaim', win: 'winClaim', chest: 'winClaim', quest: 'winClaim', buy: 'cash' }
 game.onEvent((e) => {
   const sfx = e.bought ? 'cash' : EVENT_SFX[e.type]
   if (sfx) playSfx(sfx)
   if (e.type === 'level') {
+    playLevelUp()
+    hud.levelUp()
     hud.toast(`LEVEL UP! Level ${e.level}`, '#5fe0ff')
     hud.chat(`<b>[Server]</b> You reached Level ${e.level}!`)
-  } else if (e.type === 'quest') {
-    hud.toast('Quest Complete!', '#b6ff7a')
   } else if (e.type === 'win') {
     hud.toast(`ESCAPED! +${e.amount} Win${e.amount > 1 ? 's' : ''}`, '#ffd21a')
     hud.chat(`<b>[Server]</b> You escaped! Total wins: ${e.wins}`)
@@ -347,9 +371,17 @@ function updateTreadmills(dt) {
 let finishTimer = null
 let runOpen = false // the player has left the Hub; coming back resets every zone's once-per-run awards
 function respawn(spot = SPAWN) {
+  clearTimeout(finishTimer)
   cable.release(true)
   resetPlayer(spot, SPAWN_FACING)
   syncYawToPlayer()
+}
+// A win pad awards its Wins, then sends the player home to the Hub (which also resets every zone's awards).
+const HOME_DELAY = 1800 // ms the win lingers before the trip home
+function winAndGoHome(wins) {
+  game.addWin(wins)
+  clearTimeout(finishTimer)
+  finishTimer = setTimeout(() => respawn(), HOME_DELAY)
 }
 function updateZones(dt, time) {
   const p = player.position
@@ -376,14 +408,15 @@ function updateZones(dt, time) {
   if (lavaEvent === 'fell') {
     lava.reset()
     respawn()
+    tutorial.noteFell()
     hud.toast('Oops! Lava!', '#ff8a8a')
-  } else if (lavaEvent === 'finish') game.addWin()
+  } else if (lavaEvent === 'finish') winAndGoHome(1)
   // Zone 3: a fall puts you back on its entrance; the goal pad awards wins and the run carries on into Zone 4.
   const iceEvent = zone3.update(dt, time, p)
   if (iceEvent === 'fell') {
-    respawn(ZONE3_SPAWN)
+    respawn()
     hud.toast('Brrr! Too cold!', '#9fdcff')
-  } else if (iceEvent === 'finish') game.addWin(ZONE3_WIN)
+  } else if (iceEvent === 'finish') winAndGoHome(ZONE3_WIN)
   // Climbing panels (Zones 4, 6, 8 and the vine panels of 11) lift the player while a move key is held against them.
   if (!cable.zipping && (zone4.climbAt(p) || zone6.climbAt(p) || zone8.climbAt(p) || zone11.climbAt(p))) {
     const v = player.velocity
@@ -396,86 +429,81 @@ function updateZones(dt, time) {
   // entrance; the gate ring is a bonus win; the pink platform's pad awards wins and the run carries on into Zone 5.
   const desertEvent = zone4.update(dt, time, p)
   if (desertEvent === 'fell' || desertEvent === 'burned') {
-    respawn(ZONE4_SPAWN)
+    respawn()
     hud.toast(desertEvent === 'burned' ? 'Ouch! Hot lava!' : 'Sinking sand!', '#ffb36b')
   } else if (desertEvent === 'bonus') game.addWin(ZONE4_BONUS)
-  else if (desertEvent === 'finish') game.addWin(ZONE4_WIN)
+  else if (desertEvent === 'finish') winAndGoHome(ZONE4_WIN)
   // Zone 5: the lava, or a fall off the open plateau, puts you back at the walkway's start; the chamber ring is a bonus win and the final pad the zone's win (the run carries on into Zone 6).
   const palaceEvent = zone5.update(dt, time, p)
   if (palaceEvent === 'burned' || palaceEvent === 'fell') {
-    respawn(ZONE5_SPAWN)
+    respawn()
     hud.toast(palaceEvent === 'burned' ? 'Ouch! Hot lava!' : 'Watch your step!', '#ff8ad8')
   } else if (palaceEvent === 'bonus') game.addWin(ZONE5_BONUS)
-  else if (palaceEvent === 'finish') game.addWin(ZONE5_WIN)
+  else if (palaceEvent === 'finish') winAndGoHome(ZONE5_WIN)
   // Zone 6: the goo puts you back on its start platform; the ledge ring is a bonus win and the summit pad the zone's win (the run carries on into Zone 7).
   const citadelEvent = zone6.update(dt, time, p)
   if (citadelEvent === 'fell') {
-    respawn(ZONE6_SPAWN)
+    respawn()
     hud.toast('Splash! Sticky goo!', '#7ff6ff')
   } else if (citadelEvent === 'bonus') game.addWin(ZONE6_BONUS)
-  else if (citadelEvent === 'finish') game.addWin(ZONE6_WIN)
+  else if (citadelEvent === 'finish') winAndGoHome(ZONE6_WIN)
   // Zone 7: the pit puts you back at the hall's entrance; the gate ring is a bonus win (the run carries on into Zone 8).
   const hallsEvent = zone7.update(dt, time, p)
   if (hallsEvent === 'fell') {
-    respawn(ZONE7_SPAWN)
+    respawn()
     hud.toast('Mind the gap!', '#ffb36b')
   } else if (hallsEvent === 'bonus') game.addWin(ZONE7_BONUS)
   // Zone 8: panels climb the cross walls; the pit puts you back on its start platform; the ledge ring is a bonus win.
   const towerEvent = zone8.update(dt, time, p)
   if (towerEvent === 'fell') {
-    respawn(ZONE8_SPAWN)
+    respawn()
     hud.toast('Whoops! Climb again!', '#c79bff')
   } else if (towerEvent === 'bonus') game.addWin(ZONE8_BONUS)
-  else if (towerEvent === 'finish') game.addWin(ZONE8_WIN) // the run carries on into Zone 9
+  else if (towerEvent === 'finish') winAndGoHome(ZONE8_WIN)
   // Zone 9: only the hair cable crosses the chasm; a fall puts you back on its deck; the mid-gap ring is a bonus win and the candy deck's pad the zone's win.
   const cavernEvent = zone9.update(dt, time, p)
   if (cavernEvent === 'fell') {
-    respawn(ZONE9_SPAWN)
+    respawn()
     hud.toast('Use your hair cable!', '#c79bff')
   } else if (cavernEvent === 'bonus') game.addWin(ZONE9_BONUS)
-  else if (cavernEvent === 'finish') game.addWin(ZONE9_WIN) // the run carries on into Zone 10
+  else if (cavernEvent === 'finish') winAndGoHome(ZONE9_WIN)
   // Zones 10-14 carry the player on moving platforms, so they are told when the cable has them instead.
   const carry = !cable.zipping
   // Zone 10: the springs bounce you between the islands; a fall puts you back on the start island; the ring in the first arc is a bonus win.
   const skyEvent = zone10.update(dt, time, p, carry)
   if (skyEvent === 'fell') {
-    respawn(ZONE10_SPAWN)
+    respawn()
     hud.toast('Lost in the clouds!', '#bfe4ff')
   } else if (skyEvent === 'bonus') game.addWin(ZONE10_BONUS)
-  else if (skyEvent === 'finish') game.addWin(ZONE10_WIN) // the run carries on into Zone 11
+  else if (skyEvent === 'finish') winAndGoHome(ZONE10_WIN)
   // Zone 11: the rafts and the ferry move; vine panels climb the temple; the swamp puts you back on the last checkpoint.
   const jungleEvent = zone11.update(dt, time, p, carry)
   if (jungleEvent === 'fell') {
-    respawn(zone11.spawn())
+    respawn()
     hud.toast('Splash! Sticky swamp!', '#b6ff5a')
   } else if (jungleEvent === 'bonus') game.addWin(ZONE11_BONUS)
-  else if (jungleEvent === 'finish') game.addWin(ZONE11_WIN) // the run carries on into Zone 12
+  else if (jungleEvent === 'finish') winAndGoHome(ZONE11_WIN)
   // Zone 12: the blocks sink under you and the gears turn; the lava puts you back on the last checkpoint.
   const forgeEvent = zone12.update(dt, time, p, carry)
   if (forgeEvent === 'burned') {
-    respawn(zone12.spawn())
+    respawn()
     hud.toast('Ouch! Molten lava!', '#ffb347')
   } else if (forgeEvent === 'bonus') game.addWin(ZONE12_BONUS)
-  else if (forgeEvent === 'finish') game.addWin(ZONE12_WIN) // the run carries on into Zone 13
+  else if (forgeEvent === 'finish') winAndGoHome(ZONE12_WIN)
   // Zone 13: lasers sweep the roofs and the taxi shuttles; a fall or a zap puts you back on the last checkpoint; the wide street needs the cable.
   const neonEvent = zone13.update(dt, time, p, carry)
   if (neonEvent === 'fell' || neonEvent === 'zapped') {
-    respawn(zone13.spawn())
+    respawn()
     hud.toast(neonEvent === 'zapped' ? 'Zzzap! Jump the lasers!' : 'Long way down!', '#ff5fd0')
   } else if (neonEvent === 'bonus') game.addWin(ZONE13_BONUS)
-  else if (neonEvent === 'finish') game.addWin(ZONE13_WIN) // the run carries on into Zone 14
+  else if (neonEvent === 'finish') winAndGoHome(ZONE13_WIN)
   // Zone 14: low gravity and orbiting rocks; a fall puts you back on the last checkpoint; the palace pad ends the run.
   const starEvent = zone14.update(dt, time, p, carry)
   if (starEvent === 'fell') {
-    respawn(zone14.spawn())
+    respawn()
     hud.toast('Lost in space!', '#c79bff')
   } else if (starEvent === 'bonus') game.addWin(ZONE14_BONUS)
-  else if (starEvent === 'finish') {
-    // The last stage: the Star Palace's pad sends you home, which also resets every zone's awards.
-    game.addWin(ZONE14_WIN)
-    clearTimeout(finishTimer)
-    finishTimer = setTimeout(() => respawn(), 1800)
-  }
+  else if (starEvent === 'finish') winAndGoHome(ZONE14_WIN)
 }
 
 // Nearest interactable in range drives the prompt; E (or clicking the prompt) runs it.
@@ -491,9 +519,12 @@ function updateInteraction() {
     }
   }
   if (best && !cable.zipping && !cable.flying) { // on the hair: no interacting, the only control is letting go
-    const [text, enabled] = best.prompt()
-    hud.setPrompt(text, enabled, best.action)
-    if (inputState.interact && enabled) best.action()
+    const [text, enabled, locked] = best.prompt()
+    hud.setPrompt(text, enabled, best.action, locked)
+    if (inputState.interact) {
+      if (enabled) best.action()
+      else if (locked) hud.error(locked) // tried a locked one: say why, with the error buzzer
+    }
   } else hud.setPrompt(null, false)
   inputState.interact = false
 }
@@ -537,6 +568,14 @@ renderer.setAnimationLoop(() => {
     bloxity.notifyFirstFrame()
     return
   }
+  // A tutorial card is up (the lava lesson's freeze-frames): the world holds still until the player does what it asks.
+  if (tutorial.paused()) {
+    tutorial.pausedFrame()
+    cableSfx.update(dt, cable, true)
+    renderer.render(scene, camera)
+    bloxity.notifyFirstFrame()
+    return
+  }
   const leftSalon = salon.takeSwitch()
   if (inputState.grapple) {
     cable.fire()
@@ -564,7 +603,9 @@ renderer.setAnimationLoop(() => {
   stepPlayer(dt)
   updateTreadmills(dt)
   updateZones(dt, time)
+  game.reachStage(stageHere())
   updateInteraction()
+  tutorial.update(time)
   lobby.update(dt, time)
   hud.setBoost(Math.max(0, Math.ceil((game.state.boostUntil - Date.now()) / 1000)))
 
@@ -608,5 +649,5 @@ window.addEventListener('beforeunload', bloxity.teardown)
 
 // Dev-only console hook, e.g. __game.teleport(10, 0, -5)
 if (import.meta.env.DEV) {
-  window.__game = { player, game, net, setHairLength, teleport: (x, y, z, facing = player.facing) => { resetPlayer({ x, y, z }, facing); syncYawToPlayer() } }
+  window.__game = { player, game, net, setHairLength, celebrate, teleport: (x, y, z, facing = player.facing) => { resetPlayer({ x, y, z }, facing); syncYawToPlayer() } }
 }

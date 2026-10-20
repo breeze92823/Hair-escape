@@ -5,10 +5,10 @@
 import { Client } from '@colyseus/sdk'
 import { DEV_MODE, GAME_SLUG, NET, SERVER_URL } from './config.js'
 import { authState, getEquippedAvatar, getProportions, getSkinTextureUrl, sdk, subscribeAuth } from './bloxity.js'
-import { hydrate, onChange, state, visibleHair } from './game/state.js'
+import { hydrate, onChange, setTutorialReady, state, visibleHair } from './game/state.js'
 
 // The keys the server persists (backend src/sanitize.ts); `lastSeen` is stamped when sending.
-const SAVED = ['hair', 'level', 'xp', 'wins', 'rebirths', 'prestige', 'upgrades', 'equipped', 'owned', 'spinAt', 'chests', 'quest', 'bestHair', 'giftAt', 'boostUntil', 'flags', 'cut', 'charms', 'aura', 'trail', 'lengthPick', 'days', 'lastDay']
+const SAVED = ['hair', 'level', 'xp', 'wins', 'rebirths', 'prestige', 'upgrades', 'equipped', 'owned', 'spinAt', 'chests', 'quest', 'tutorial', 'bestHair', 'stageReached','giftAt', 'boostUntil', 'flags', 'cut', 'charms', 'aura', 'trail', 'lengthPick', 'days', 'lastDay']
 const AVATAR_MAX = 3000 // backend AVATAR_MAX_LEN
 
 export const net = {
@@ -160,6 +160,7 @@ function attach(room) {
       const away = hydrate(saved)
       for (const fn of hydrateListeners) fn(away)
     }
+    setTutorialReady()
     lastSaved = snapshot() // what the server holds: don't echo it straight back
     syncLook()
   })
@@ -168,12 +169,14 @@ function attach(room) {
     net.hydrated = true
     hydratedId = sentId
     lastSaved = ''
+    setTutorialReady() // the tutorial carries on from the local step
     if (!isGuest()) saveNow()
     syncLook()
   })
   room.onMessage('serverError', () => {
     // The save exists but could not be read: never overwrite it.
     net.hydrated = false
+    setTutorialReady() // play on from the local save
     console.warn('[net] server could not read the saved progress; saving is off for this session')
   })
   room.onMessage('leaderboard', (rows) => {
@@ -214,6 +217,7 @@ async function connect() {
     attach(await client.joinOrCreate('world', { ...id, avatar: avatarJson() }))
   } catch (err) {
     console.warn('[net] could not reach the server; playing offline', err?.message ?? err)
+    setTutorialReady() // offline: the local save is all there is
     setTimeout(connect, NET.retryDelay * 1000)
   } finally {
     connecting = false
@@ -221,7 +225,13 @@ async function connect() {
 }
 
 export function initNet() {
-  if (!SERVER_URL && !canResolve()) return console.info('[net] no server configured; playing offline')
+  if (!SERVER_URL && !canResolve()) {
+    setTutorialReady()
+    return console.info('[net] no server configured; playing offline')
+  }
+  // The account's save normally answers within a second; never hold the tutorial back for good
+  // if auth or the server never does.
+  setTimeout(setTutorialReady, NET.tutorialWait * 1000)
   onChange(() => {
     scheduleSave()
     syncLook()

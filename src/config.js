@@ -189,6 +189,13 @@ export const SALON = {
     trails: { yaw: 0.35, pitch: 0.2, distance: 7.5, target: [0, 1, 0] },
     length: { yaw: Math.PI * 0.85, pitch: 0.55, distance: 9.5, target: [1.5, 0.4, -3.5] },
   },
+  // The door transition in and out of the salon (salon/doors.js). Seconds.
+  doors: {
+    close: 0.42, // the doors slide shut
+    hold: 0.38, // shut, with the HAIR SALON badge up, while the scene swaps behind them
+    open: 0.55, // the doors slide apart
+    reduced: 0.4, // time factor under prefers-reduced-motion
+  },
 }
 
 // Touch controls (touch.js). Screen sizes are CSS px.
@@ -235,8 +242,58 @@ export const SFX = {
   hover: { file: 'button-hover.mp3', volume: 0.5 }, // pointer moves onto a button (mouse only)
   hairGain: { file: 'power_gain.mp3', volume: 0.3 }, // every treadmill step; quiet, it repeats
   cash: { file: 'cash.mp3', volume: 0.5 }, // spending hair or Wins
-  levelUp: { file: 'level_up.mp3', volume: 0.4 }, // level up and rebirth
+  levelUp: { file: 'level_up.mp3', volume: 0.4 }, // rebirth and prestige (a level up has its own jingle, LEVEL_SFX)
   winClaim: { file: 'win-claim.mp3', volume: 0.35 }, // zone wins, chests, quests, free gift
+}
+
+// Level-up jingle (sfx.js `playLevelUp`, synthesised): a bell arpeggio rising into a shimmering
+// chord with a noise swoosh under it and glints on top, into a short hall. The tutorial's finish
+// plays the `big` take: a bass under the chord, more glints and a longer ring.
+export const LEVEL_SFX = {
+  volume: 0.32, // master
+  notes: [784, 1047, 1319, 1568], // Hz G5 C6 E6 G6, the rising arpeggio
+  step: 0.07, // s between arpeggio notes
+  noteLength: 0.34, // s each arpeggio note rings
+  chord: [1047, 1319, 1568, 2093], // Hz C6 E6 G6 C7, the bloom after the arpeggio
+  chordLength: 1.1, // s the chord rings
+  bass: [262, 392], // Hz C4 G4 under the chord (big take only)
+  sparkles: 8, // glints over the chord (twice as many in the big take)
+  sparkleRange: [2600, 5200], // Hz
+  riser: 0.12, // gain of the swoosh up into the chord
+  reverb: 0.35, // wet gain of the hall tail
+  reverbTime: 0.8, // s of that tail
+  bigBoost: 1.25, // volume of the big take against the normal one
+  bigRing: 1.6, // chord length factor of the big take
+  minGap: 0.35, // s between jingles, so a run of quick levels doesn't stack
+  duck: 1000, // ms the treadmill's step tick stays quiet so the jingle reads
+}
+
+// Tutorial-complete party sounds (sfx.js, synthesised): the confetti poppers, the party blower
+// and a tapped balloon popping. Scaled by the sfx_volume setting.
+export const PARTY_SFX = {
+  volume: 0.42, // master
+  reverb: 0.25, // wet gain into the level-up hall
+  crackFreq: 1400, // Hz centre of a popper's crack
+  crackLength: 0.09, // s
+  thump: [150, 45, 0.16], // [Hz start, Hz end, s] the low kick under the crack
+  crackles: 14, // paper ticks in the confetti's rustle after a pop
+  crackleSpread: 0.45, // s those ticks spread over
+  horn: { from: 330, to: 620, unroll: 0.14, length: 0.62, sag: 0.82, vibrato: [8, 14], cutoff: 2200, level: 0.3 }, // party blower: Hz, Hz, s, s, end pitch factor, [Hz rate, Hz depth], Hz lowpass, gain
+  balloon: 0.55, // gain of a tapped balloon's pop
+}
+
+// Error buzzer (sfx.js `playError`, synthesised): a thump under two quick falling buzzes, the
+// game-show "nuh-uh" for a denied action ("Need 3 Rebirths!"). Scaled by the sfx_volume setting.
+export const ERROR_SFX = {
+  volume: 0.3, // master
+  buzzes: [[340, 230, 0], [270, 150, 0.12]], // [Hz start, Hz end, s offset]: each buzz glides down
+  length: 0.15, // s per buzz
+  detune: 14, // cents the square and saw layers spread apart (a fat, slightly sour tone)
+  cutoff: 2000, // Hz lowpass that rounds off the buzz
+  resonance: 5, // Q of that lowpass (a little "wah" bite)
+  thump: [160, 50, 0.14], // [Hz start, Hz end, s] sine kick under the first buzz
+  thumpLevel: 0.9, // gain of the thump against the buzzes
+  minGap: 0.15, // s between buzzers, so rapid taps don't stack
 }
 
 // The base rig, measured from player.glb: origin at the feet, 6.4 units tall at bind pose.
@@ -357,5 +414,58 @@ export const NET = {
   remoteLerp: 12, // 1/s: how fast remote players ease toward their last relayed pose
   maxRemotes: 24, // other players drawn at once (nearest first)
   remoteFade: 90, // m: farther players are hidden
+  hairNearDist: 25, // m: remote players closer than this step their hair at hairNearHz
+  hairNearHz: 30, // Hz
+  hairFarHz: 10, // Hz: farther remote players' hair (cheaper)
   nameHeight: 2.9, // m above a remote player's feet the name tag floats
+  tutorialWait: 10, // s the tutorial waits for the account's save before starting from the local one
+}
+
+// --- New-player tutorial (tutorial.js, tutorialLogic.js) ---------------------------------------------------
+// The step is saved with the account (state.tutorial); a save from before the tutorial counts as finished.
+export const DISABLE_TUTORIAL = import.meta.env.VITE_DISABLE_TUTORIAL === 'true'
+// Tutorial-complete party (party.js): two confetti poppers fire from the bottom corners, glossy
+// balloons float up the screen (tap one to pop it) and a TUTORIAL COMPLETE! banner bounces in over
+// spinning sun rays. One overlay canvas at a capped pixel ratio, balloons drawn from sprites
+// painted once, and everything is torn down when the last piece leaves the screen.
+export const PARTY = {
+  maxDpr: 1.5, // pixel-ratio cap of the overlay canvas
+  smallScreen: 600, // css px: a shorter side under this is a phone (fewer balloons and pieces)
+  balloons: 16, // balloons on a big screen
+  balloonsSmall: 10, // ... on a phone
+  balloonSize: 0.11, // balloon width as a fraction of the screen's shorter side
+  balloonMin: 48, // css px, smallest balloon width
+  balloonMax: 116, // css px, largest
+  spawnSpread: 1.6, // s over which the balloons are let go
+  riseTime: [4.2, 6.2], // s a balloon takes to float up one screen height
+  sway: [10, 26], // css px side-to-side drift
+  confetti: 200, // cannon and rain pieces on a big screen
+  confettiSmall: 120, // ... on a phone
+  rainShare: 0.3, // fraction of those that rain down from the top edge
+  rainSpread: 1.2, // s the rain is let go over
+  popPieces: 12, // shards a popped balloon bursts into
+  fireAt: [0.3, 0.45], // s after the start the left and right poppers fire
+  hornAt: 1.1, // s after the start the party blower sounds
+  speed: [2.2, 3.6], // screen heights / s a popper throws its confetti
+  gravity: 0.8, // screen heights / s²
+  drag: 3, // 1/s air drag: confetti flutters down at about gravity / drag
+  bannerMs: 4200, // ms the banner stays before it bows out
+  maxTime: 9, // s after which the party stops even if pieces are left
+  colors: ['#ff4f6d', '#ffb020', '#ffe14a', '#46d36a', '#3fb7ff', '#9a6bff', '#ff7ad9'], // balloons and confetti
+}
+
+export const TUTORIAL = {
+  done: 7, // state.tutorial value meaning "finished" (backend constants.ts TUTORIAL_DONE must match)
+  level: 3, // step 1: run on the treadmill up to this level
+  style: 'blueberry', // step 6: the hair style the player is sent to buy
+  completeMs: 3500, // ms the "Tutorial Complete!" pill stays up
+  spacing: 1.1, // m between trail arrows
+  speed: 1.8, // m/s the trail crawls toward the target
+  maxArrows: 140, // trail arrows drawn at most
+  hideWithin: 2.5, // m from the target where the trail disappears (the beacon stays)
+  lift: 0.3, // m the trail floats over the line from the player's feet to the target
+  beaconHeight: 4.5, // m above the target the big arrow floats
+  edgeLook: 2.5, // m ahead of the player checked for lava: at a slab's edge the game pauses to teach the hair throw
+  steerAfter: 2, // m of hair out before the game pauses to teach steering the tip
+  steerNudge: 12, // px of mouse / drag look input that counts as steering (resumes the steer pause)
 }

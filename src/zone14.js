@@ -58,6 +58,7 @@ const TREAD = { x: CX + 4, z: at(131), len: 4.8, w: 2.4, mult: 10 } // the x10 H
 // The night dome over Zones 13 and 14: an ellipsoid from Zone 13's entrance to this zone's back wall (its caps sit inside the walls either end).
 const DOME = { rx: 90, rz: (ZONE13_Z0 - at(END_E)) / 2 + 3, y: T - 7, z: (ZONE13_Z0 + at(END_E)) / 2 }
 const STARS = 900
+const NIGHT_FROM = 12 // m south of Zone 13's entrance (inside Zone 12's enclosed hall) the night dome switches on
 const PLANETS = [[-40, 60, 22, 9, '#e8c48a', true], [48, 110, -12, 8, '#d84a2a', false], [34, 20, 32, 5, '#3fa8ff', false]] // [x offset, e, y above T, radius, colour, ringed]
 const SUN = { dx: -60, e: 150, y: 45, r: 7 }
 const COMETS = [[-45, 10, 60, 30, 18], [50, 140, 110, -30, 14], [-20, 150, 20, 40, 22]] // [x0 offset, e0, y0 above T, drift x per loop, m/s] streaking north and across
@@ -203,9 +204,13 @@ function orbiter(k) {
 // --- The sky: dome, stars, planets, sun, comets, drifting rocks -----------------------
 function buildSky(k) {
   const m = material(k)
-  const dome = k.mesh(new SphereGeometry(1, 28, 18), m.night, CX, DOME.y, DOME.z, { cast: false })
+  // The dome and stars live in one group, shown only near Zones 13-14: from the daytime zones the ellipsoid would show as a dark disc on the horizon.
+  const night = new Group()
+  k.g.add(night)
+  const dome = new Mesh(new SphereGeometry(1, 28, 18), m.night)
+  dome.position.set(CX, DOME.y, DOME.z)
   dome.scale.set(DOME.rx, DOME.rx, DOME.rz)
-  dome.receiveShadow = false
+  night.add(dome)
   // Stars: points just inside the dome's surface.
   const arr = new Float32Array(STARS * 3)
   const v = new Vector3()
@@ -217,7 +222,7 @@ function buildSky(k) {
   }
   const geo = new BufferGeometry()
   geo.setAttribute('position', new Float32BufferAttribute(arr, 3))
-  k.g.add(new Points(geo, new PointsMaterial({ color: '#ffffff', size: 2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.95 })))
+  night.add(new Points(geo, new PointsMaterial({ color: '#ffffff', size: 2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.95 })))
   // Planets and the sun.
   for (const [dx, e, y, r, color, ringed] of PLANETS) {
     const p = k.mesh(new SphereGeometry(r, 18, 14), k.std(color, { roughness: 0.8, emissive: color, emissiveIntensity: 0.15 }), CX + dx, T + y, at(e), { cast: false })
@@ -256,7 +261,7 @@ function buildSky(k) {
   drifters.instanceMatrix.needsUpdate = true
   drifters.castShadow = drifters.receiveShadow = false
   k.g.add(drifters)
-  return { comets, drifters }
+  return { night, comets, drifters }
 }
 
 // --- The moon base ---------------------------------------------------------------------
@@ -358,7 +363,7 @@ export function buildZone14(scene, addCollider) {
   textures()
   const movers = createMovers(addCollider)
 
-  const { comets, drifters } = buildSky(k)
+  const { night, comets, drifters } = buildSky(k)
   buildBase(k)
   const crystals = buildCourse(k, movers)
   const ring = bonusRing(k, RING, ZONE14_BONUS)
@@ -387,6 +392,7 @@ export function buildZone14(scene, addCollider) {
     spawn: () => checkpoints.spot(),
     // Returns 'fell' (off into the stars), 'bonus' (through the ring) or 'finish' (the win pad). `carry` false while the player rides the cable.
     update(dt, time, p, carry = true) {
+      night.visible = p.z < ZONE13_Z0 + NIGHT_FROM
       movers.update(time, p, carry)
       ring.update(time)
       pad.update(time)

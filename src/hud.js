@@ -1,17 +1,14 @@
 // DOM HUD over the canvas, styled after the Roblox-sim look in the reference:
 // the navy quest pill top-centre, the Rebirth / Wins counters and the 2-column button
-// grid down the left (Backpack, Rebirth, Teleport, Hair), the bottom
+// grid down the left (Rebirth, Teleport, Hair), the bottom
 // stack of the hair counter over the Level bar and the four level packs, and the
 // Starter Pack / x2 Hair offers on the right. Plus prompts, toasts, "+N" popups,
 // a chat log and the panels the buttons open.
 import * as game from './game/state.js'
-import { clamp, DEV_MODE } from './config.js'
-import { playSfx } from './sfx.js'
+import { clamp } from './config.js'
+import { playError, playSfx } from './sfx.js'
 import { CHARMS } from './game/cosmetics.js'
 import { TAB_ICONS, charmIcon, colorIcon } from './salon/icons.js'
-
-// Dev runs (same test as the save skip in state.js) can teleport to any built stage, ignoring its Level / Wins requirement.
-const FREE_TELEPORT = DEV_MODE || import.meta.env.DEV || import.meta.env.MODE === 'development'
 
 // Three significant digits like the reference ("1.36K", "25K", "12.9M"), always rounded down.
 const formatNumber = (n) => {
@@ -68,12 +65,27 @@ const CSS = `
 .hud-quest::before { content: ''; position: absolute; inset: 4px; border-radius: 36px; background-image: radial-gradient(rgba(255,255,255,0.06) 30%, transparent 32%); background-size: 22px 22px; pointer-events: none; }
 .hud-quest.pop { transform: translateX(-50%) scale(calc(var(--s) * 1.06)); }
 .hud-quest .badge { flex: none; min-width: 74px; height: 52px; border-radius: 26px; display: grid; place-items: center; font-size: 30px; background: linear-gradient(#ffe46b, #ffb800); border: 3px solid #4a3000; box-shadow: inset 0 -4px 0 rgba(160,90,0,0.5); }
-.hud-quest .text { flex: 1; text-align: center; font-size: 31px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-quest .lines { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.hud-quest .text { width: 100%; text-align: center; font-size: 31px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-quest .hint { max-width: 100%; font-size: 21px; font-weight: 600; color: #cfe0ff; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-quest .hint:empty { display: none; }
 .hud-quest .hl { color: #ffd21a; }
 .hud-quest .skip { position: absolute; top: -2px; left: 50%; transform: translateX(-50%); padding: 0 8px; font-size: 15px; font-weight: 600; color: rgba(255,255,255,0.55); }
 .hud-quest .skip:hover { color: #fff; }
 .hud-quest.done .skip { display: none; }
 .hud-quest.done .badge { background: linear-gradient(#b6ff7a, #33d11c); border-color: #154a00; }
+/* New-player tutorial (tutorial.js) drives the same pill: a TUTORIAL tag, a pulsing gold rim and a real Skip button under it. */
+.hud-quest .tag { display: none; position: absolute; top: -20px; left: 40px; padding: 1px 14px; border-radius: 14px; font-size: 19px; letter-spacing: 2px; background: linear-gradient(#ffe46b, #ffb800); border: 3px solid #4a3000; }
+.hud-quest.tutorial .tag { display: block; }
+.hud-quest.tutorial { border-color: #ffb800; animation: tut-rim 1.4s ease-in-out infinite; }
+.hud-quest.tutorial.done { border-color: #33d11c; animation: none; }
+.hud-quest.tutorial.done .tag { background: linear-gradient(#b6ff7a, #33d11c); border-color: #154a00; }
+.hud-quest.tutorial .skip { top: auto; bottom: -34px; padding: 2px 18px; font-size: 19px; color: #fff; border-radius: 14px; background: linear-gradient(#ff6a5a, #d8352e); border: 3px solid #5a0f0c; }
+.hud-quest.tutorial .skip::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, calc(88px / var(--s))); height: max(100%, calc(44px / var(--s))); transform: translate(-50%, -50%); } /* ≥44 px tap area at any HUD scale */
+.hud-quest.tutorial.warn { border-color: #ff3b3b; animation: tut-warn 0.6s ease-in-out infinite; }
+.hud-quest.tutorial.warn .hl { color: #ff8a7a; }
+@keyframes tut-warn { 50% { box-shadow: inset 0 3px 0 rgba(255,255,255,0.12), 0 0 0 4px rgba(255,70,50,0.9), 0 0 22px 6px rgba(255,40,20,0.55); } }
+@keyframes tut-rim { 50% { box-shadow: inset 0 3px 0 rgba(255,255,255,0.12), 0 0 0 4px rgba(255,210,58,0.85), 0 0 22px 6px rgba(255,190,30,0.55); } }
 
 /* Left column: Rebirth / Wins counters over the 2x3 button grid. */
 .hud-left { position: absolute; left: calc(30px * var(--s) + var(--l)); top: calc(215px * var(--s) + var(--tp)); transform: scale(var(--s)); transform-origin: top left; display: flex; flex-direction: column; gap: 10px; }
@@ -89,7 +101,6 @@ const CSS = `
 .hud-tile:active { transform: scale(0.96); }
 .hud-tile > svg { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); width: 86px; height: 86px; filter: drop-shadow(0 3px 0 rgba(0,0,0,0.3)); }
 .hud-tile .lbl { position: relative; font-size: 26px; line-height: 1; letter-spacing: 0.01em; white-space: nowrap; }
-.hud-tile.backpack { background: linear-gradient(#ffbf45, #ff9a14); }
 .hud-tile.rebirth { background: linear-gradient(#64c0ff, #2f8ff0); }
 .hud-tile.teleport { background: linear-gradient(#c977ff, #9a3df0); }
 .hud-tile.hair { background: linear-gradient(#ffe24a, #ffbe14); }
@@ -122,6 +133,11 @@ const CSS = `
 .hud-level .fill::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,0.25) 28%, transparent 31%); background-size: 24px 24px; background-position: 6px 6px; }
 .hud-level .lv, .hud-level .xp { position: absolute; top: 50%; transform: translateY(-50%); font-size: 42px; line-height: 1; }
 .hud-level .lv { left: 16px; }
+/* Level up: the bar swells with a cyan glow while a shine sweeps across it. */
+.hud-level.up { animation: lv-up 0.9s ease-out; }
+.hud-level.up::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.85) 50%, transparent 70%); transform: translateX(-100%); animation: lv-shine 0.9s ease-out forwards; }
+@keyframes lv-up { 25% { transform: scale(1.06); box-shadow: 0 0 0 4px #fff, 0 0 30px 10px rgba(95,224,255,0.9); } }
+@keyframes lv-shine { to { transform: translateX(100%); } }
 .hud-level .xp { right: 16px; }
 .hud-packs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; width: 100%; margin-top: 6px; }
 .hud-pack { position: relative; height: 80px; border-radius: 10px; border: 4px solid #15152a; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1; box-shadow: inset 0 4px 0 rgba(255,255,255,0.3), inset 0 -5px 0 rgba(0,0,0,0.12), 0 3px 0 rgba(0,0,0,0.3); transition: transform .1s; }
@@ -164,9 +180,13 @@ const CSS = `
 .hud-prompt.dim .key { display: none; }
 .hud-prompt.dim span { color: #ffb0b0; }
 
-.hud-toasts { position: absolute; top: calc(220px * var(--s) + var(--tp)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.hud-toasts { position: absolute; top: calc(220px * var(--s) + var(--tp)); left: 50%; transform: translateX(-50%); z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .hud-toast { font-size: clamp(24px, 3.2vw, 46px); animation: toast 2.6s ease-out forwards; white-space: nowrap; }
 @keyframes toast { 0% { opacity: 0; transform: scale(0.4) } 10% { opacity: 1; transform: scale(1.12) } 18% { transform: scale(1) } 80% { opacity: 1 } 100% { opacity: 0; transform: translateY(-30px) } }
+/* Error toast (a denied action): red with a cross badge and a glow, slams in and shakes. */
+#hud .hud-toast.err { display: flex; align-items: center; gap: 0.3em; color: #ff4b4b; -webkit-text-stroke-color: #3d0606; filter: drop-shadow(0 0 0.3em rgba(255,40,40,0.6)); animation: toast-err 2.6s ease-out forwards; }
+#hud .hud-toast.err .x { flex: none; width: 1.05em; height: 1.05em; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle at 35% 30%, #ff8a8a, #e01818 60%, #a00808); box-shadow: 0 0 0 0.1em #3d0606, inset 0 -0.08em 0 rgba(0,0,0,0.3); color: #fff; font-size: 0.8em; line-height: 1; -webkit-text-stroke: 0; }
+@keyframes toast-err { 0% { opacity: 0; transform: scale(1.6) } 7% { opacity: 1; transform: scale(0.95) } 11% { transform: translateX(-0.22em) rotate(-2deg) } 15% { transform: translateX(0.22em) rotate(2deg) } 19% { transform: translateX(-0.14em) rotate(-1deg) } 23% { transform: translateX(0.08em) } 27% { transform: none } 80% { opacity: 1 } 100% { opacity: 0; transform: translateY(-30px) } }
 
 .hud-pop { position: absolute; display: flex; align-items: center; gap: 6px; font-size: clamp(26px, 3vw, 38px); color: #ffd77a; transform: translate(-50%, -50%); animation: pop 0.9s ease-out forwards; }
 .hud-pop-ico { display: block; width: 1.15em; height: 1.15em; filter: drop-shadow(0 0 8px rgba(255, 120, 200, 0.9)); animation: pop-whirl 0.9s cubic-bezier(0.3, 0.6, 0.5, 1) forwards; }
@@ -231,11 +251,14 @@ const CSS = `
 #hud.compact .hud-right { transform: scale(max(var(--s), 0.5)); } /* keeps x2 Hair ~44 px tall on the smallest phones */
 #hud.compact .hud-quest { width: 540px; }
 #hud.compact .hud-quest .text { font-size: 26px; line-height: 1.1; white-space: normal; }
+#hud.compact .hud-quest .hint { font-size: 20px; white-space: normal; }
+#hud.compact .hud-quest.tutorial .skip { font-size: 24px; bottom: -40px; }
 #hud.compact .hud-prompt { bottom: calc(130px * var(--s) + var(--bt)); }
 /* Portrait: the quest pill spans the width, so the columns start below it, and EVENT drops its label to fit beside the top bar. */
 #hud.compact.portrait .hud-event { width: 56px; padding: 0 !important; justify-content: center; }
 #hud.compact.portrait .hud-event span { display: none; }
 #hud.compact.portrait .hud-left, #hud.compact.portrait .hud-right { top: calc(240px * var(--s) + var(--tp)); }
+#hud.compact.portrait:has(.hud-quest.tutorial) :is(.hud-left, .hud-right) { top: calc(300px * var(--s) + var(--tp)); } /* room for the hint and Skip tutorial */
 /* Hair Salon open (salon/): only the top bar, EVENT and toasts stay; the salon overlay draws the rest. */
 #hud.salon :is(.hud-quest, .hud-left, .hud-bottom, .hud-right, .hud-prompt, .hud-chat) { display: none !important; }
 `
@@ -573,8 +596,6 @@ const REBIRTH_ICON = `<svg viewBox="0 0 64 64"><image href="${import.meta.env.BA
 const TROPHY_ICON = `<svg viewBox="0 0 64 64"><path d="M16 8h32v16c0 10-7 18-16 18S16 34 16 24z" fill="#ffd21a" stroke="#5a3200" stroke-width="3" stroke-linejoin="round"/><path d="M16 12H8v6c0 7 5 12 10 12M48 12h8v6c0 7-5 12-10 12" fill="none" stroke="#5a3200" stroke-width="3"/><path d="M10 14h6v10c-3-1-6-4-6-8zM54 14h-6v10c3-1 6-4 6-8z" fill="#ffb000"/><path d="M28 42h8v8h-8z" fill="#ffb000" stroke="#5a3200" stroke-width="3"/><rect x="18" y="50" width="28" height="8" rx="2" fill="#ffd21a" stroke="#5a3200" stroke-width="3"/><path d="M24 14c0 6 2 10 5 13" fill="none" stroke="#fff6c0" stroke-width="3" stroke-linecap="round"/></svg>`
 // Green hexagon with a white rounded square (the premium currency).
 const ROBUX_ICON = `<svg viewBox="0 0 64 64"><path d="M32 3 57 17.5v29L32 61 7 46.5v-29z" fill="#2fcf6a" stroke="#0b5a28" stroke-width="3" stroke-linejoin="round"/><rect x="20" y="20" width="24" height="24" rx="4" fill="#fff" transform="rotate(10 32 32)"/><rect x="26" y="26" width="12" height="12" rx="2" fill="#2fcf6a" transform="rotate(10 32 32)"/></svg>`
-// Red backpack with white buckles.
-const BACKPACK_ICON = `<svg viewBox="0 0 64 64"><path d="M24 12a8 8 0 0 1 16 0" fill="none" stroke="#4a0a0a" stroke-width="4" stroke-linecap="round"/><rect x="4" y="22" width="9" height="24" rx="3" fill="#c81e1e" stroke="#4a0a0a" stroke-width="3"/><rect x="51" y="22" width="9" height="24" rx="3" fill="#c81e1e" stroke="#4a0a0a" stroke-width="3"/><rect x="11" y="12" width="42" height="47" rx="11" fill="#f0302a" stroke="#4a0a0a" stroke-width="3"/><path d="M11 26c8 4 34 4 42 0" fill="none" stroke="#4a0a0a" stroke-width="3"/><path d="M15 20c3-4 8-5 12-5" fill="none" stroke="#ff8a7a" stroke-width="3" stroke-linecap="round"/><rect x="17" y="35" width="30" height="18" rx="5" fill="#d42020" stroke="#4a0a0a" stroke-width="3"/><rect x="21" y="29" width="7" height="12" rx="2" fill="#eef0f6" stroke="#4a0a0a" stroke-width="2.5"/><rect x="36" y="29" width="7" height="12" rx="2" fill="#eef0f6" stroke="#4a0a0a" stroke-width="2.5"/></svg>`
 // Blue swirl portal in a violet ring.
 const PORTAL_ICON = `<svg viewBox="0 0 64 64"><ellipse cx="32" cy="32" rx="23" ry="27" fill="#8a4dff" stroke="#2a0a5a" stroke-width="3"/><ellipse cx="32" cy="32" rx="17" ry="21" fill="#4a7bff"/><ellipse cx="32" cy="32" rx="12" ry="15" fill="#6fd8ff"/><path d="M32 13c11 1 15 11 9 17s-17 4-15 12 11 7 11 7M22 22c-3 4-3 9 0 12" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><ellipse cx="32" cy="32" rx="4" ry="5.5" fill="#2a2aa8"/><circle cx="12" cy="18" r="2.5" fill="#ff8aff"/><circle cx="53" cy="47" r="2.5" fill="#ff8aff"/></svg>`
 // Gift box (the Starter Pack).
@@ -635,7 +656,7 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
   const eventBtn = el('button', 'hud-event', `${CROWN_ICON}<span>EVENT</span>`)
   root.append(top, eventBtn)
 
-  const quest = el('div', 'hud-quest', `<button class="skip">Skip</button><div class="badge stroke">1/6</div><div class="text stroke"></div>`)
+  const quest = el('div', 'hud-quest', `<button class="skip">Skip</button><div class="tag stroke">TUTORIAL</div><div class="badge stroke">1/6</div><div class="lines"><div class="text stroke"></div><div class="hint"></div></div>`)
   root.appendChild(quest)
 
   // --- Left: counters + button grid
@@ -643,7 +664,6 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     <div class="hud-cur rebirths"><span class="wrap">${REBIRTH_ICON}</span><span class="n stroke">0</span></div>
     <div class="hud-cur wins"><span class="wrap">${TROPHY_ICON}<button class="plus stroke" title="Get more Wins">+</button></span><span class="n stroke">0</span></div>
     <div class="hud-grid">
-      <button class="hud-tile studs backpack">${BACKPACK_ICON}<span class="lbl stroke">Backpack</span></button>
       <button class="hud-tile studs rebirth">${REBIRTH_ICON}<span class="lbl stroke">REBIRTH!</span><span class="bang">!</span></button>
       <button class="hud-tile studs teleport">${PORTAL_ICON}<span class="lbl stroke">Teleport</span></button>
       <button class="hud-tile studs hair">${HAIRSTYLE_ICON}<span class="lbl stroke">Hair</span></button>
@@ -738,7 +758,6 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     <table class="stats"></table>
     <div class="row"><button class="hud-btn grey stroke menu">Settings</button></div>`)
   const shopPanel = panel('wide', `<h2 class="stroke">🛒 Shop</h2><div class="hud-shop"></div><p class="hud-empty">Spend your Wins on boosts and level packs.</p>`)
-  const backpackPanel = panel('wide', `<h2 class="stroke">🎒 Backpack</h2><div class="hud-list"></div>`)
   // Rebirth window: the renderer fills the Before / After columns.
   const rbCol = (side, title) => `<div class="rb-col rb-${side}"><h3 class="stroke">${title}</h3>
     <div class="rb-card blue"><span class="ico">${HAIR_ICON}</span><span class="big stroke"></span></div>
@@ -823,7 +842,7 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
   }
   window.addEventListener('resize', fitTeleport)
   fitTeleport()
-  const panels = [eventPanel, helpPanel, shopPanel, backpackPanel, rebirthPanel, teleportPanel]
+  const panels = [eventPanel, helpPanel, shopPanel, rebirthPanel, teleportPanel]
   const closePanels = () => {
     panels.forEach((x) => x.classList.remove('open'))
     document.body.classList.remove('win-open')
@@ -843,16 +862,6 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
   })
 
   // --- Panel contents (rebuilt on open and whenever the state changes while open)
-  const hairRow = (id, st) => {
-    const equipped = game.state.equipped === id
-    let action
-    if (equipped) action = `<button class="hud-btn gold stroke" disabled>EQUIPPED</button>`
-    else if (game.canEquip(id)) action = `<button class="hud-btn stroke" data-equip="${id}">EQUIP</button>`
-    else if (game.canAcquire(id)) action = `<button class="hud-btn gold stroke" data-equip="${id}">BUY 🏆${formatNumber(st.price)}</button>`
-    else action = `<span class="req">${game.requirementText(id)}</span>`
-    const sw = st.stripes ? `linear-gradient(135deg, ${st.stripes.join(',')})` : `linear-gradient(${st.tip}, ${st.color})`
-    return `<div class="hud-row${equipped ? ' on' : ''}"><span class="sw" style="background:${sw}"></span><span class="nm">${st.name}<span class="sub">+${st.bonus} hair per step</span></span>${action}</div>`
-  }
   // Rebirth window panes. The prize row and the upgrade grid rebuild only when what they show changes, so the
   // pulsing buttons don't restart (and the grid keeps its scroll) on every hair step.
   const rbPane = (tab) => rebirthPanel.querySelector(`.rb-pane.${tab}`)
@@ -944,11 +953,6 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
         `<button class="hud-pack studs red" data-offer="x2"><span class="lv stroke">Permanent boost</span><span class="amt stroke">x2 Hair</span>${f.x2 ? '<span class="hud-price stroke">OWNED</span>' : price(X2_HAIR.price)}</button>` +
         `<button class="hud-pack studs purple full" data-offer="starter"><span class="lv stroke">Starter Pack</span><span class="amt stroke">+${formatNumber(sp.hair)} Hair · +${sp.wins} Wins</span>${f.starter ? '<span class="hud-price stroke">CLAIMED</span>' : price(sp.price)}</button>`
     }],
-    [backpackPanel, () => {
-      const list = backpackPanel.querySelector('.hud-list')
-      const styles = Object.entries(game.HAIR_STYLES).filter(([id]) => game.canEquip(id))
-      list.innerHTML = styles.map(([id, st]) => hairRow(id, st)).join('')
-    }],
     [rebirthPanel, () => {
       const tab = rbTabOpen
       rebirthPanel.dataset.tab = tab
@@ -996,9 +1000,10 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       teleportPanel.querySelector('.tp-lv .n').textContent = `Lv ${s.level}`
       const you = `<span class="you stroke">YOU!</span>`
       teleportPanel.querySelector('.tp-list').innerHTML = stages.map((st, i) => {
-          const lvOk = FREE_TELEPORT || s.level >= st.level
+          // A stage is locked until the player has walked into it once, however many Wins they hold.
+          const lvOk = i <= s.stageReached
           let go
-          if (!st.wins || (FREE_TELEPORT && st.spot)) go = `<span class="tp-go ready free stroke">FREE!</span>`
+          if (!st.wins) go = `<span class="tp-go ready free stroke">FREE!</span>`
           else go = `<span class="tp-go${st.spot && lvOk && s.wins >= st.wins ? ' ready' : ''}">${TROPHY_ICON}<span class="c stroke">${formatNumber(st.wins)}</span></span>`
           return `<button class="tp-row${i === here ? ' here' : ''}" data-stage="${i}">
             <span class="ico">${stageIcon(i + 1)}${lvOk ? '' : `<span class="lock">${PADLOCK_ICON}</span>`}</span>
@@ -1012,7 +1017,8 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
   const renderOpen = () => panels.forEach((p) => p.classList.contains('open') && render(p))
 
   // --- Wiring
-  const api = {} // filled below; click handlers use api.toast
+  const api = {} // filled below; click handlers use api.toast / api.error
+  const needRebirths = (n) => `Need ${n} Rebirth${n === 1 ? '' : 's'}!`
   const q = (sel) => root.querySelector(sel)
   quest.querySelector('.skip').addEventListener('click', () => onSkipQuest?.())
   helpPanel.querySelector('.menu').addEventListener('click', () => onMenu?.())
@@ -1025,23 +1031,22 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     let msg
     if (pack != null) (ok = game.buyLevelPack(+pack)), (msg = `+${LEVEL_PACKS[+pack].levels} Levels!`)
     else if (offer === 'x2') {
-      if (game.state.flags.x2) return api.toast('Already owned', '#ffb0b0')
+      if (game.state.flags.x2) return api.error('Already owned')
       ok = game.buyX2Hair()
       msg = 'x2 Hair unlocked!'
     } else if (offer === 'starter') {
-      if (game.state.flags.starter) return api.toast('Already claimed', '#ffb0b0')
+      if (game.state.flags.starter) return api.error('Already claimed')
       ok = game.buyStarterPack()
       msg = 'Starter Pack claimed!'
     }
     if (ok) {
       api.toast(msg, '#b6ff7a')
       renderOpen()
-    } else api.toast('Not enough Wins!', '#ffb0b0')
+    } else api.error('Not enough Wins!')
   }
   for (const sel of ['.hud-cur.wins .plus', '.hud-starter', '.hud-x2']) q(sel).addEventListener('click', () => openPanel(shopPanel))
   packs.addEventListener('click', (e) => buy(e.target.closest('.hud-pack')))
   shopPanel.addEventListener('click', (e) => buy(e.target.closest('.hud-pack')))
-  q('.hud-tile.backpack').addEventListener('click', () => openPanel(backpackPanel))
   q('.hud-tile.hair').addEventListener('click', () => {
     closePanels()
     onOpenSalon?.()
@@ -1059,13 +1064,9 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     e.currentTarget.classList.toggle('on', on)
   })
   eventBtn.addEventListener('click', () => openPanel(eventPanel))
-  backpackPanel.addEventListener('click', (e) => {
-    const id = e.target.closest('[data-equip]')?.dataset.equip
-    if (id && !game.equip(id)) api.toast('Not enough Wins!', '#ffb0b0')
-  })
   rebirthPanel.querySelector('.rb-go').addEventListener('click', () => {
     if (game.rebirth()) closePanels()
-    else api.toast(`Reach Level ${game.rebirthLevel()}!`, '#ffb0b0')
+    else api.error(`Reach Level ${game.rebirthLevel()}!`)
   })
   rebirthPanel.addEventListener('click', (e) => {
     const tab = e.target.closest('.rb-tab')?.dataset.tab
@@ -1076,11 +1077,11 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     }
     const up = e.target.closest('[data-up]')?.dataset.up
     if (up) {
-      if (!game.upgrade(up)) api.toast(`Need ${game.upgradeNeed(up)} Rebirths!`, '#ffb0b0')
+      if (!game.upgrade(up)) api.error(needRebirths(game.upgradeNeed(up)))
       return
     }
     if (e.target.closest('.pr-go')) {
-      if (!game.canPrestige()) return api.toast(`Need ${game.prestigeRebirths()} Rebirths!`, '#ffb0b0')
+      if (!game.canPrestige()) return api.error(needRebirths(game.prestigeRebirths()))
       if (!prestigeSure) {
         prestigeSure = true
         return render(rebirthPanel)
@@ -1117,10 +1118,9 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     const i = Number(row.dataset.stage)
     const st = stages[i]
     const s = game.state
-    if (!st.spot) api.toast('Coming soon!', '#ffb0b0')
-    else if (FREE_TELEPORT) go(st.spot, `Stage ${i + 1}`)
-    else if (s.level < st.level) api.toast(`Reach Level ${st.level}!`, '#ffb0b0')
-    else if (s.wins < st.wins) api.toast(`Need ${st.wins} Wins!`, '#ffb0b0')
+    if (!st.spot) api.error('Coming soon!')
+    else if (i > s.stageReached) api.error('Reach this stage first!')
+    else if (s.wins < st.wins) api.error(`Need ${st.wins} Wins!`)
     else go(st.spot, `Stage ${i + 1}`)
   })
 
@@ -1150,15 +1150,24 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       set('canRebirth', game.canRebirth() || game.canPrestige() || game.anyUpgradeReady(), (ok) => q('.hud-tile.rebirth').classList.toggle('alert', ok))
       renderOpen()
     },
-    setQuest(index, total, text) {
-      set('quest', `${index}|${text}`, () => {
+    // `opts.tutorial` switches the pill to the new-player tutorial look; `opts.hint` is a smaller second line.
+    // Live counters in the text repaint it without replaying the pop, which only marks a new step.
+    // `opts.warn` turns the rim red (the tutorial's "not now, you're over the lava").
+    setQuest(index, total, text, { tutorial = false, hint = '', warn = false } = {}) {
+      set('quest', `${tutorial}|${warn}|${index}|${text}|${hint}`, () => {
         const done = index >= total
         quest.classList.toggle('done', done)
+        quest.classList.toggle('tutorial', tutorial)
+        quest.classList.toggle('warn', warn)
+        quest.querySelector('.skip').textContent = tutorial ? 'Skip tutorial' : 'Skip'
         quest.querySelector('.badge').textContent = `${Math.min(index + 1, total)}/${total}`
         const safe = text.replace(/[<>&]/g, '')
         quest.querySelector('.text').innerHTML = safe.replace(/\*(.+?)\*/g, '<span class="hl">$1</span>')
-        quest.classList.add('pop')
-        setTimeout(() => quest.classList.remove('pop'), 250)
+        quest.querySelector('.hint').textContent = hint
+        set('questStep', `${tutorial}|${index}`, () => {
+          quest.classList.add('pop')
+          setTimeout(() => quest.classList.remove('pop'), 250)
+        })
       })
     },
     setHair(n) {
@@ -1196,14 +1205,21 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
         level.querySelector('.fill').style.width = `${Math.min(100, (xp / req) * 100)}%`
       })
     },
+    // The level bar's level-up flash (restarts if levels come quickly).
+    levelUp() {
+      level.classList.remove('up')
+      void level.offsetWidth
+      level.classList.add('up')
+    },
     setStats(rows) {
       set('stats', JSON.stringify(rows), () => {
         helpPanel.querySelector('.stats').innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')
       })
     },
-    // text: string or null. `enabled` false shows it greyed with no key (a requirement, not an action).
-    setPrompt(text, enabled = true, action = null) {
-      promptAction = enabled ? action : null
+    // text: string or null. `enabled` false shows it greyed with no key (a requirement, not an action);
+    // a `locked` message makes tapping it show that as an error.
+    setPrompt(text, enabled = true, action = null, locked = null) {
+      promptAction = enabled ? action : locked ? () => api.error(locked) : null
       set('prompt', `${text}|${enabled}`, () => {
         prompt.style.display = text ? 'flex' : 'none'
         prompt.classList.toggle('dim', !enabled)
@@ -1214,6 +1230,17 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       const t = el('div', 'hud-toast stroke')
       t.textContent = text
       t.style.color = fill
+      toasts.appendChild(t)
+      setTimeout(() => t.remove(), 2600)
+    },
+    // A denied action ("Need 3 Rebirths!"): the red error toast and the error buzzer. Repeating
+    // the same error restarts its toast instead of stacking copies.
+    error(text) {
+      playError()
+      for (const old of toasts.querySelectorAll('.err')) if (old.dataset.text === text) old.remove()
+      const t = el('div', 'hud-toast err stroke', '<span class="x">✖</span><span></span>')
+      t.dataset.text = text
+      t.lastChild.textContent = text
       toasts.appendChild(t)
       setTimeout(() => t.remove(), 2600)
     },

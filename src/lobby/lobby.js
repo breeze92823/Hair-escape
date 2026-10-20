@@ -10,7 +10,7 @@
 import {
   AdditiveBlending, BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, DoubleSide, Group, Mesh,
   MeshBasicMaterial, PlaneGeometry, Shape, ShapeGeometry,
-  SphereGeometry, SRGBColorSpace, TorusGeometry, ExtrudeGeometry,
+  SphereGeometry, SRGBColorSpace, TorusGeometry,
 } from 'three'
 import { floorMaterial, makeCanvas, onFontReady, outlinedText, studMaterial } from './paint.js'
 import { label } from './labels.js'
@@ -224,9 +224,9 @@ function buildPortal(g, addCollider) {
 // ---------------------------------------------------------------------------
 // West bleachers: three long red studded steps rising to the wall.
 const STEPS = [
-  { x0: -15, x1: -10.5, h: 0.55 },
-  { x0: -19.5, x1: -15, h: 1.1 },
-  { x0: ROOM.minX, x1: -19.5, h: 1.65 },
+  { x0: -15, x1: -10.5, h: 0.4 },
+  { x0: -19.5, x1: -15, h: 0.8 },
+  { x0: ROOM.minX, x1: -19.5, h: 1.2 },
 ]
 const BLEACHER_Z = [-28, 20]
 
@@ -245,50 +245,6 @@ function buildBleachers(g, addCollider) {
     slab(g, yellow, xc, z0 + 0.15, w, 0.3, s.h, s.h + 0.08)
     slab(g, yellow, s.x1 + 0.02, zc, 0.06, d, s.h - 0.2, s.h - 0.06) // stripe on the riser
   }
-}
-
-// ---------------------------------------------------------------------------
-// Big yellow bobbing arrow (points down at the FREE treadmill).
-function arrowMesh() {
-  const sh = new Shape()
-  sh.moveTo(-0.45, 1.6)
-  sh.lineTo(0.45, 1.6)
-  sh.lineTo(0.45, 0.7)
-  sh.lineTo(1.0, 0.7)
-  sh.lineTo(0, -0.4)
-  sh.lineTo(-1.0, 0.7)
-  sh.lineTo(-0.45, 0.7)
-  sh.closePath()
-  const geo = new ExtrudeGeometry(sh, { depth: 0.45, bevelEnabled: true, bevelSize: 0.08, bevelThickness: 0.08, bevelSegments: 2 })
-  geo.translate(0, 0, -0.225)
-  const m = new Mesh(geo, std('#ffd21a', { roughness: 0.35, emissive: '#ffb000', emissiveIntensity: 0.35 }))
-  m.castShadow = true
-  return m
-}
-
-// Floor chevrons leading from spawn to the FREE treadmill.
-function buildChevrons(g, from, to, count) {
-  const sh = new Shape()
-  sh.moveTo(-0.9, 0)
-  sh.lineTo(0, 0.75)
-  sh.lineTo(0.9, 0)
-  sh.lineTo(0.9, -0.38)
-  sh.lineTo(0, 0.37)
-  sh.lineTo(-0.9, -0.38)
-  sh.closePath()
-  const geo = new ShapeGeometry(sh)
-  const angle = Math.atan2(to.x - from.x, -(to.z - from.z))
-  const chevrons = []
-  for (let i = 0; i < count; i++) {
-    const t = i / (count - 1)
-    const mat = new MeshBasicMaterial({ color: '#ffcf1a', transparent: true, opacity: 0.9, side: DoubleSide, depthWrite: false })
-    const m = new Mesh(geo, mat)
-    m.rotation.set(-Math.PI / 2, 0, -angle)
-    m.position.set(from.x + (to.x - from.x) * t, 0.06, from.z + (to.z - from.z) * t)
-    g.add(m)
-    chevrons.push(m)
-  }
-  return (time) => chevrons.forEach((c, i) => (c.material.opacity = 0.45 + 0.5 * Math.max(0, Math.sin(time * 4 - i * 0.7))))
 }
 
 // ---------------------------------------------------------------------------
@@ -419,7 +375,7 @@ function buildRebirth(g, addCollider) {
     interact: {
       position: { x, y: 1, z },
       radius: 4,
-      prompt: () => (canRebirth() ? ['Rebirth (resets hair & level, +50% hair)', true] : [`Rebirth needs Level ${rebirthLevel()}`, false]),
+      prompt: () => (canRebirth() ? ['Rebirth (resets hair & level, +50% hair)', true] : [`Rebirth needs Level ${rebirthLevel()}`, false, `Reach Level ${rebirthLevel()}!`]),
       action: () => rebirth(),
     },
   }
@@ -571,26 +527,22 @@ export function buildLobby(scene, addCollider) {
   slab(g, std('#c9c2ff', { roughness: 0.5 }), (16.6 + ROOM.maxX) / 2, 4, ROOM.maxX - 16.6, 64, 0, 0.05).castShadow = false
   slab(g, std(C.yellow, { roughness: 0.4 }), 16.75, 4, 0.3, 64, 0, 0.08).castShadow = false
 
-  const arrow = arrowMesh()
-  arrow.position.set(TM_X - 1.6, 6.3, TM_Z0)
-  g.add(arrow)
-  const chevrons = buildChevrons(g, { x: 5.2, z: 4 }, { x: 16.5, z: TM_Z0 + 2.5 }, 9)
-
   // Interactions (E): equip each displayed hair, the rebirth altar.
   const interactables = [
     ...south.interactables,
     ...shop.map((s) => ({
       position: s.position,
       radius: 3.6,
-      // [text, enabled]: a disabled prompt explains a requirement instead of offering an action.
+      // [text, enabled, locked]: a disabled prompt explains a requirement instead of offering an action;
+      // `locked` is the error shown when the player tries it anyway.
       prompt: () => {
         const name = s.style.name
         if (progress.equipped === s.id) return [`${name} is equipped`, false]
         if (canEquip(s.id)) return [`Equip ${name} (+${s.style.bonus} / Hair)`, true]
         if (canAcquire(s.id)) return [`Buy ${name} for ${s.style.price} Wins`, true]
         const req = styleReq(s.id)
-        if (req.type === 'price') return [`${name} costs ${req.value} Wins (you have ${progress.wins}, escape the course!)`, false]
-        return [`${name}: ${requirementText(s.id)}`, false]
+        if (req.type === 'price') return [`${name} costs ${req.value} Wins (you have ${progress.wins}, escape the course!)`, false, `Need ${req.value} Wins!`]
+        return [`${name}: ${requirementText(s.id)}`, false, requirementText(s.id)]
       },
       action: () => equip(s.id),
     })),
@@ -601,7 +553,7 @@ export function buildLobby(scene, addCollider) {
       prompt: () => {
         const { tier } = t
         if (tierUnlocked(tier)) return [`x${tier.mult} Hair treadmill: run on it!`, false]
-        return [`x${tier.mult} Hair needs ${tier.rebirths} Rebirth${tier.rebirths === 1 ? '' : 's'} (you have ${progress.rebirths})`, false]
+        return [`x${tier.mult} Hair needs ${tier.rebirths} Rebirth${tier.rebirths === 1 ? '' : 's'} (you have ${progress.rebirths})`, false, `Need ${tier.rebirths} Rebirth${tier.rebirths === 1 ? '' : 's'}!`]
       },
       action: () => {},
     })),
@@ -613,6 +565,8 @@ export function buildLobby(scene, addCollider) {
     interactables,
     treadmills,
     portalHit: portal.hit,
+    // Where hair style `id` is displayed ({ x, y, z }, y about chest height), for the tutorial's guide.
+    shopSpot: (id) => shop.find((s) => s.id === id)?.position ?? null,
     // Called on any progression change.
     refresh(state, playerName) {
       lastState = state
@@ -632,9 +586,6 @@ export function buildLobby(scene, addCollider) {
       if (lastState) rebirthAltar.update(dt, time, lastState)
       sleeper(time)
       clouds(time)
-      chevrons(time)
-      arrow.position.y = 5.6 + Math.sin(time * 3) * 0.35
-      arrow.rotation.y = time * 1.2
       portal.shimmer.material.opacity = 0.1 + Math.sin(time * 2) * 0.06
     },
   }

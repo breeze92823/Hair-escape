@@ -20,6 +20,7 @@ import { kit, lavaTexture, voxelTexture } from './lavaPath.js'
 import { ZONE3_GOAL } from './zone3.js'
 import { label } from './lobby/labels.js'
 import { makeCanvas } from './lobby/paint.js'
+import { paidPad, winPad } from './zoneProps.js'
 
 export const ZONE4_NAME = 'DESERT CANYON'
 export const ZONE4_WIN = 10 // wins for the pad on the pink platform (advertised on the Ice Lake trophy)
@@ -55,7 +56,7 @@ const RING = { z: (GATE.z0 + GATE.z1) / 2, y: BRIDGE.top + 2.8, radius: 1.3 * S 
 export const ZONE4_FINISH = FINISH
 export const PALACE_Z = -273 // Zone 5's palace front
 export const ZONE4_PIT = PIT
-const PADS = { yellow: -2.5 * S, blue: 2.5 * S, z: -251, size: 2.6 * S }
+const PADS = { yellow: -2.5 * S, blue: 2.5 * S, z: -251 }
 
 // Stepped sandstone terraces either side, rising in three bands toward the
 // fortress: [x0, x1, tops per band, south edge]. The innermost stops at the
@@ -389,10 +390,9 @@ function buildUpper(k) {
   k.voxBox({ x: 0, z: fz, w: FINISH.w, d: fd, y1: FINISH.top - 1, side: tex.sand, cell: 1.5, collide: false, cast: false })
   k.voxBox({ x: 0, z: fz, w: FINISH.w, d: fd, y0: FINISH.top - 1, y1: FINISH.top, side: tex.pink, cell: 1, collide: false })
   k.addCollider(0, fz, FINISH.w, fd, FINISH.top)
-  const pad = (x, color, emissive) => k.mesh(new BoxGeometry(PADS.size, 0.12, PADS.size), k.std(color, { emissive, emissiveIntensity: 0.45, roughness: 0.4 }), x, FINISH.top + 0.06, PADS.z, { cast: false })
-  pad(PADS.yellow, '#ffe11a', '#ffc400')
-  pad(PADS.blue, '#3fb6ff', '#1a8fe0')
+  paidPad(k, PADS.blue, PADS.z, FINISH.top, '+20 Wins')
   cactus(-FINISH.w / 2 + 1.6, FINISH.top, FINISH.z0 - 1.6, 2.2)
+  return winPad(k, PADS.yellow, PADS.z, FINISH.top, ZONE4_WIN)
 }
 
 // --- The backdrop: wings, purple wing caps, sandstone towers -----------------------
@@ -433,7 +433,7 @@ export function buildZone4(scene, addCollider) {
   buildBasin(k)
   const ring = buildGate(k)
   buildCourtyard(k)
-  buildUpper(k)
+  const pad = buildUpper(k)
   buildBackdrop(k)
   buildInstances(k, cactusBoxes, k.std('#4fa82a', { roughness: 0.85 }))
   buildInstances(k, flowerBoxes, k.std('#ff4a6a', { roughness: 0.6 }))
@@ -443,7 +443,6 @@ export function buildZone4(scene, addCollider) {
     { text: 'LEVEL 46', size: 1, fill: ['#fff4dc', '#ffd8a0'], stroke: '#4a2200' },
   ], [ENTRY_SLAB[0], ENTRY_SLAB[4] + 4.5, ENTRY_SLAB[1]], { unit: 2.2 })
   label(g, [{ text: `🏆 +${ZONE4_BONUS} Win`, size: 0.5, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [0, RING.y, RING.z], { unit: 1.2 })
-  label(g, [{ text: `+${ZONE4_WIN} Wins`, size: 0.7, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [PADS.yellow, FINISH.top + 1.8, PADS.z], { unit: 1.4 })
 
   const pz = (PILLAR.z0 + PILLAR.z1) / 2
   let bonus = false
@@ -460,6 +459,7 @@ export function buildZone4(scene, addCollider) {
     update(dt, time, p) {
       ring.position.y = RING.y + Math.sin(time * 2) * 0.15
       ring.rotation.y = Math.sin(time * 0.8) * 0.3
+      pad.update(time)
       const inBasin = Math.abs(p.x) < BASIN.halfW && p.z < BASIN.z0 && p.z > BASIN.z1
       if (inBasin && p.y < SAND_Y + 0.1) return 'fell'
       const inPit = Math.abs(p.x) < PIT.halfW && p.z < PIT.z0 && p.z > PIT.z1
@@ -468,8 +468,7 @@ export function buildZone4(scene, addCollider) {
         bonus = true
         return 'bonus'
       }
-      const onPad = Math.abs(p.x - PADS.yellow) < PADS.size / 2 && Math.abs(p.z - PADS.z) < PADS.size / 2
-      if (!won && onPad && p.y >= FINISH.top - 0.05) {
+      if (!won && pad.onPad(p)) {
         won = true
         return 'finish'
       }

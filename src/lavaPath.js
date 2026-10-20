@@ -26,6 +26,9 @@ const SLABS = [
   { z0: START_Z - 32, z1: START_Z - 40, w: 8.5, chevrons: [[0, START_Z - 35.5]] },
   { z0: START_Z - 43, z1: START_Z - 50, w: 8, chevrons: [[0, START_Z - 46.5]] },
 ]
+// Stairs from the Hub doorway up to the first slab: five 0.26 m risers (from the Hub's 0.3 m step), 0.9 m treads.
+const STAIR = { from: 0.3, count: 5, run: 0.9, rise: 0.26 } // m
+const STAIR_END_Z = START_Z + 0.6 - STAIR.count * STAIR.run
 const FINISH = { z0: START_Z - 53, z1: START_Z - 63, w: 12 }
 const finishZ = (FINISH.z0 + FINISH.z1) / 2
 const PAD = { x: -3, size: 3 } // the yellow +1 Win pad, left of centre on the finish
@@ -39,7 +42,7 @@ const PLATEAU = { x1: 80, top: 8, endZ: CANYON.endZ } // dark outer ground beyon
 const ARCH = { z: FINISH.z0 + 1.5, span: 46, foot: PLATEAU.top, rise: 8, band: 2.6, depth: 5 }
 
 // Zone 3 builds its entrance off the finish platform.
-export const LAVA_FINISH = { z: finishZ, z0: FINISH.z0, z1: FINISH.z1, w: FINISH.w, top: TOP }
+export const LAVA_FINISH = { z: finishZ, z0: FINISH.z0, z1: FINISH.z1, w: FINISH.w, top: TOP, padX: PAD.x }
 
 const COL = {
   dirt: '#6b4226',
@@ -429,9 +432,12 @@ export function buildLavaPath(scene, addCollider) {
   const s0 = SLABS[0]
   const stepTex = voxelTexture(COL.slateSide, { cells: 4, jitter: 0.1, grid: 0.25 })
   const stepTop = voxelTexture(COL.slabTop, { cells: 4, jitter: 0.03, grid: 0.05 })
-  k.voxSpan(-s0.w / 2, s0.w / 2, START_Z + 0.6, START_Z - 1.2, { y1: 0.55, side: stepTex, top: stepTop, cell: 1 })
-  k.voxSpan(-s0.w / 2, s0.w / 2, START_Z - 1.2, START_Z - 2.4, { y1: 1.1, side: stepTex, top: stepTop, cell: 1 })
-  for (const s of SLABS) buildSlab(k, 0, s === s0 ? s.z0 - 2.4 : s.z0, s.z1, s.w, s.chevrons)
+  // The Hub's blue steps top out at 0.3 m; these carry on in even risers up to the slab.
+  for (let i = 0; i < STAIR.count; i++) {
+    const za = START_Z + 0.6 - i * STAIR.run
+    k.voxSpan(-s0.w / 2, s0.w / 2, za, za - STAIR.run, { y1: STAIR.from + (i + 1) * STAIR.rise, side: stepTex, top: stepTop, cell: 1 })
+  }
+  for (const s of SLABS) buildSlab(k, 0, s === s0 ? STAIR_END_Z : s.z0, s.z1, s.w, s.chevrons)
 
   const archTop = buildArch(k)
   const trophy = buildFinish(k)
