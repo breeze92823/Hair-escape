@@ -613,6 +613,8 @@ export function buildLobby(scene, addCollider) {
     interactables,
     treadmills,
     portalHit: portal.hit,
+    // Where hair style `id` is displayed ({ x, y, z }, y about chest height), for the tutorial's guide.
+    shopSpot: (id) => shop.find((s) => s.id === id)?.position ?? null,
     // Called on any progression change.
     refresh(state, playerName) {
       lastState = state

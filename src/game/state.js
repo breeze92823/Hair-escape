@@ -2,7 +2,7 @@
 // the rebirth upgrades, the equipped hair style and the tutorial quest chain. One mutable singleton;
 // anything that changes it calls `changed()` so the HUD, leaderboards and the
 // avatar's hair follow. Saved to localStorage (per browser, best effort).
-import { HAIR, DEV_MODE, clamp } from '../config.js'
+import { HAIR, DEV_MODE, TUTORIAL, clamp } from '../config.js'
 import { AURAS, CHARM_SLOTS, CHARMS, CUTS, DEFAULT_AURA, DEFAULT_CUT, DEFAULT_TRAIL, LENGTH_ANCHORS, TRAILS } from './cosmetics.js'
 
 // Hair styles in the HAIR SHOP (west bleachers), also the salon's Colors tab. `bonus` is hair per
@@ -101,6 +101,7 @@ const fresh = () => ({
   chests: {}, // chest id -> last opened (ms), or for the rebirth chest the number claimed
   lastSeen: 0, // ms timestamp of the last save (offline earnings)
   quest: 0,
+  tutorial: 0, // new-player tutorial step (tutorial.js); TUTORIAL.done = finished
   bestHair: 3,
   giftAt: 0, // ms timestamp the daily gift was last claimed
   boostUntil: 0, // ms timestamp the event boost runs out
@@ -173,6 +174,21 @@ export function skipQuest() {
   if (state.quest >= QUESTS.length) return
   state.quest++
   changed()
+}
+
+// The new-player tutorial (tutorial.js) moves its step through here so it is saved like the rest.
+export function setTutorialStep(n) {
+  if (state.tutorial === n) return
+  state.tutorial = n
+  changed()
+}
+
+// Whether the save (local or the account's) has been read, so a returning player never sees
+// the tutorial's first step flash up before their progress arrives. Set by net.js.
+let tutorialReady = false
+export const isTutorialReady = () => tutorialReady
+export function setTutorialReady() {
+  tutorialReady = true
 }
 
 export function setFlag(name) {
@@ -562,6 +578,8 @@ function applyDevStats() {
   const owned = (env.VITE_DEV_OWNED ?? '').split(',').map((k) => k.trim()).filter(Boolean)
   const everything = () => [...Object.keys(HAIR_STYLES), ...Object.entries(SALON_KINDS).flatMap(([kind, list]) => Object.keys(list).map((id) => `${kind}:${id}`))]
   state.owned = [...new Set([...state.owned, ...owned.flatMap((k) => (k === 'all' ? everything() : [k]))])]
+  const tutorial = num(env.VITE_DEV_TUTORIAL)
+  if (tutorial != null) state.tutorial = Math.min(tutorial, TUTORIAL.done)
   const equipped = env.VITE_DEV_EQUIPPED?.trim()
   if (equipped && HAIR_STYLES[equipped]) state.equipped = equipped
   else if (equipped) console.warn(`[state] VITE_DEV_EQUIPPED: unknown hair style '${equipped}'`)
@@ -589,6 +607,8 @@ function sanitizeSalon() {
 
 // Merges a saved document over a fresh state and credits the hair earned while away.
 function applySaved(saved) {
+  // A save from before the tutorial existed belongs to a returning player: nothing left to teach.
+  if (typeof saved.tutorial !== 'number') saved = { ...saved, tutorial: TUTORIAL.done }
   Object.assign(state, fresh(), saved, { flags: { ...fresh().flags, ...saved.flags }, chests: { ...saved.chests }, upgrades: { ...saved.upgrades }, charms: { ...fresh().charms, ...saved.charms } })
   sanitizeSalon()
   if (!HAIR_STYLES[state.equipped]) state.equipped = 'golden'
@@ -606,6 +626,7 @@ function applySaved(saved) {
 export function load() {
   if (NO_PERSIST) {
     applyDevStats()
+    tutorialReady = true // dev runs never load a save: start the tutorial straight away
     countDay()
     changed()
     return

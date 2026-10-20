@@ -39,7 +39,7 @@ const PLATEAU = { x1: 80, top: 8, endZ: CANYON.endZ } // dark outer ground beyon
 const ARCH = { z: FINISH.z0 + 1.5, span: 46, foot: PLATEAU.top, rise: 8, band: 2.6, depth: 5 }
 
 // Zone 3 builds its entrance off the finish platform.
-export const LAVA_FINISH = { z: finishZ, z0: FINISH.z0, z1: FINISH.z1, w: FINISH.w, top: TOP }
+export const LAVA_FINISH = { z: finishZ, z0: FINISH.z0, z1: FINISH.z1, w: FINISH.w, top: TOP, padX: PAD.x }
 
 const COL = {
   dirt: '#6b4226',

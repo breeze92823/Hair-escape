@@ -1,6 +1,6 @@
 # Hair Escape — Landmarks & Map
 
-The game has nine zones in a line running north from the Hub's START doorway:
+The game has fourteen zones in a line running north from the Hub's START doorway:
 
 | Zone | Area | Source |
 |------|------|--------|
@@ -12,7 +12,12 @@ The game has nine zones in a line running north from the Hub's START doorway:
 | **6. TEAL CITADEL** | x 6.5 … 46.5, z −375 … −474 (walled goo pit: start platform, lantern caps, two towers with climbing panels and a cyan octagon window, a +1 Win ring, the summit's +30 Wins pad and the doorway under the next zone's board) | [src/zone6.js](src/zone6.js) |
 | **7. AMBER HALLS** | x 17.5 … 35.5, z −474 … −571 (open-roofed navy hall over a pit: brown floors, yellow lantern platforms, three gate walls, a +1 Win ring) | [src/zone7.js](src/zone7.js) |
 | **8. VIOLET TOWER** | x 15.5 … 37.5, z −571 … −683 (open-roofed purple tower over a pit: three climbing walls with teal-framed openings, lantern platforms, a +1 Win ring, the final platform's +100 Wins pad, and the next zone's mine deck) | [src/zone8.js](src/zone8.js) |
-| **9. CRYSTAL CAVERN** | x 11.5 … 41.5, z −683 … −838 (24 m faceted-rock cavern over a snowy floor, a crystal forest and geode portals: only the hair cable crosses it, three platforms with crystal pillars and anchor cubes, a +1 Win ring, terracotta gate walls and a candy-land deck with the +200 Wins pad) | [src/zone9.js](src/zone9.js) |
+| **9. CRYSTAL CAVERN** | x 11.5 … 41.5, z −683 … −838 (24 m faceted-rock cavern over a snowy floor, a crystal forest and geode portals: only the hair cable crosses it, three platforms with crystal pillars and anchor cubes, a +1 Win ring, terracotta gate walls and a candy-land deck with the +200 Wins pad and the doorway on into Zone 10) | [src/zone9.js](src/zone9.js) |
+| **10. SKY GARDENS** | x −13.5 … 66.5, z −838 … −968 (floating islands over clouds under open sky: cloud springs that bounce you 10-11 m, a +1 Win ring in the arc, a rainbow bridge, a windmill, the summit's +350 Wins pad, gazebo and cloud gate) | [src/zone10.js](src/zone10.js) |
+| **11. JUNGLE RUINS** | x 9.5 … 43.5, z −968 … −1074 (acid swamp between jungle walls: sliding stone rafts, a +1 Win ring, a ferry, stone serpents, a two-tier temple climbed by vine panels, the golden idol and the +500 Wins pad, a serpent-head doorway) | [src/zone11.js](src/zone11.js) |
+| **12. MAGMA FORGE** | x 11.5 … 41.5, z −1074 … −1178 (volcano hall over lava: sinking obsidian blocks, the forge deck with a +1 Win ring, three spinning gears, the forge hall's +750 Wins pad, an iron door) | [src/zone12.js](src/zone12.js) |
+| **13. NEON SKYLINE** | x −18.5 … 71.5, z −1178 … −1328 (night-city rooftops: sweeping lasers, a hover taxi, a +1 Win ring, a 28 m cable-only street to the Hair Tower's +1000 Wins pad and the lift) | [src/zone13.js](src/zone13.js) |
+| **14. STAR SUMMIT** | x −33.5 … 86.5, z −1328 … −1484 (space, low gravity: a moon base, asteroid hops, rocks orbiting a purple planet with a +1 Win ring, the Star Palace's +2000 Wins pad, which sends you home: the last stage) | [src/zone14.js](src/zone14.js) |
 
 Coordinates are world units `(x, y, z)`; the ground is `y = 0`. **North is −Z**, east is +X. Tunables are in [src/config.js](src/config.js).
 
@@ -353,11 +358,11 @@ z=-683        ═══ opens into Zone 9's cavern ═══
 
 1. Spawn → follow the floor chevrons to the **FREE x1 treadmill** and run to grow hair
 2. Spend Wins on the **hair shop** styles; rebirths open the higher treadmill tiers
-3. Walk out the **START** doorway and jump across the **lava slabs** to the **+1 Win** pad, hop the **ice floes** to the **+3 Wins** pad, then cross the **quicksand**, climb a **blue panel** and cross the **lava pit** to the pink platform for **+10 Wins** (plus **+1** for the gate ring), then walk on through the **Purple Palace** (ring **+1**) to its final platform for **+15 Wins**, then climb the **Teal Citadel** (ring **+1**) to its summit for **+30 Wins**, then cross the **Amber Halls** (ring **+1**) and climb the **Violet Tower** (ring **+1**) to its final platform for **+100 Wins**, which sends you home. Going back to the Hub resets the once-per-run pads
+3. Walk out the **START** doorway and jump across the **lava slabs** to the **+1 Win** pad, hop the **ice floes** to the **+3 Wins** pad, then cross the **quicksand**, climb a **blue panel** and cross the **lava pit** to the pink platform for **+10 Wins** (plus **+1** for the gate ring), then walk on through the **Purple Palace** (ring **+1**) to its final platform for **+15 Wins**, then climb the **Teal Citadel** (ring **+1**) to its summit for **+30 Wins**, then cross the **Amber Halls** (ring **+1**) and climb the **Violet Tower** (ring **+1**) to its final platform for **+100 Wins**, zip the **Crystal Cavern** (ring **+1**) to the candy deck for **+200 Wins**, bounce the **Sky Gardens** (ring **+1**) for **+350 Wins**, ride the **Jungle Ruins** rafts and climb its vines (ring **+1**) for **+500 Wins**, cross the **Magma Forge** (ring **+1**) for **+750 Wins**, jump the **Neon Skyline** lasers and zip its street (ring **+1**) for **+1000 Wins**, then float up the **Star Summit** (ring **+1**) to the Star Palace for **+2000 Wins**, which sends you home. Going back to the Hub resets the once-per-run pads
 4. Open **chests**, claim the **gift**, use the **Lucky Spin**
 5. **Rebirth** at the altar to raise the hair multiplier and unlock the rebirth-gated treadmills
 
-> Wins come from the +1 Win pad at the end of the Lava Run, the +3 Wins pad at the end of the Ice Lake, the Desert Canyon gate ring (+1) and the pad on its pink platform (+10), the Purple Palace chamber ring (+1) and its final pad (+15), the Teal Citadel ledge ring (+1) and its summit pad (+30), the Amber Halls gate ring (+1), and the Violet Tower ledge ring (+1) and its final pad (+100).
+> Wins come from the +1 Win pad at the end of the Lava Run, the +3 Wins pad at the end of the Ice Lake, the Desert Canyon gate ring (+1) and the pad on its pink platform (+10), the Purple Palace chamber ring (+1) and its final pad (+15), the Teal Citadel ledge ring (+1) and its summit pad (+30), the Amber Halls gate ring (+1), the Violet Tower ledge ring (+1) and its final pad (+100), the Crystal Cavern ring (+1) and candy pad (+200), the Sky Gardens ring (+1) and summit pad (+350), the Jungle Ruins ring (+1) and temple pad (+500), the Magma Forge ring (+1) and forge-hall pad (+750), the Neon Skyline ring (+1) and Hair Tower pad (+1000), and the Star Summit ring (+1) and palace pad (+2000).
 
 ---
 
@@ -371,4 +376,85 @@ Continues north from Zone 8's mine deck (`ZONE8_EXIT`, z −683, deck top y 63.6
 | C2 | **Terracotta block** | x 21.5 … 31.5, z −753 … −763, top y 68.1 | solid column from the snow, pale top; magenta pillar at x 29 |
 | C3 | **Wooden scaffold** | x 20.5 … 32.5, z −787 … −803, top y 64.6 | teal pillar at x 23.5 |
 
-A **+1 Win** ring (`ZONE9_BONUS`) hangs mid-gap at (26.5, 67.1, −741). Past C3, two **terracotta walls** (z −803 … −811, a 8 m doorway, dark boulders overhead) lead onto the **candy deck** (z −811 … −835, top y 64.6, under open sky: the rock roof ends at the gate): 10 m of orange planks with the rail track, then the pink-and-white candy floor, a wooden gate frame, giant lollipops (pink / teal), candy arches, gumdrops, and the yellow pad (23.5, −821) that awards **+200 Wins** (`ZONE9_WIN`, once per run) and sends you home after 1.8 s. A cyan "+400 Wins" pad is decoration; the x2 Hair treadmill (29, −824; the Hub's model, `frost` theme, console to the north) grows hair like the Hub's. Falling below y 61.1 (before the snow) respawns you on the deck (`ZONE9_SPAWN`, (26.5, 63.7, −686)). `WORLD_BOUNDS.minZ` (−850) stays north of the back wall (z −838).
+A **+1 Win** ring (`ZONE9_BONUS`) hangs mid-gap at (26.5, 67.1, −741). Past C3, two **terracotta walls** (z −803 … −811, a 8 m doorway, dark boulders overhead) lead onto the **candy deck** (z −811 … −835, top y 64.6, under open sky: the rock roof ends at the gate): 10 m of orange planks with the rail track, then the pink-and-white candy floor, a wooden gate frame, giant lollipops (pink / teal), candy arches, gumdrops, and the yellow pad (23.5, −821) that awards **+200 Wins** (`ZONE9_WIN`, once per run); the run carries on. A cyan "+400 Wins" pad is decoration; the x2 Hair treadmill (29, −824; the Hub's model, `frost` theme, console to the north) grows hair like the Hub's. The brown building at the back (z −835 … −838) has a 6 × 4.5 doorway (x 23.5 … 29.5, a yellow arrow over it) through which Zone 10's start island carries on (`ZONE9_EXIT`). Falling below y 61.1 (before the snow) respawns you on the deck (`ZONE9_SPAWN`, (26.5, 63.7, −686)).
+
+---
+
+# Zone 10 — SKY GARDENS
+
+Continues north through the doorway in Zone 9's back building (z −838, top y 64.6, centre line x 26.5). A chain of floating islands (grass on a white stone rim over dirt sides and a rock cone, cloud puffs round each base) hangs in open sky over a drifting sea of cloud puffs; a striped hot-air balloon circles to the west. Hop the first islands, then stand on a pink **cloud spring** (`bounceAt`, `PHYSICS.bounceSpeed` 19 m/s: ~8 m up, 10-11 m forward at a run) to reach the garden island through the **+1 Win** ring (`ZONE10_BONUS`) in the arc. A rainbow bridge arches on to the windmill island, whose spring throws you up to the summit's front porch. The summit holds the yellow pad (**+350 Wins**, `ZONE10_WIN`, once per run; the run carries on), a cyan "+700 Wins" pad (decoration), the x2.5 Hair treadmill (`sky` theme), a gold gazebo you walk through and the cloud gate into Zone 11 (`ZONE10_EXIT`). Falling below y 58.6 respawns you on the start island (`ZONE10_SPAWN`, (26.5, 64.7, −841)).
+
+| # | Landmark | Position (x, y, z) | Notes |
+|---|----------|--------------------|-------|
+| S1 | **Start island** | x 19.5 → 33.5, z −838 → −852, top 64.6 | "RECOMMENDED / LEVEL 240" sign at (26.5, 71.6, −848) |
+| S2 | **Islands 1-3** | 8 m wide; z −856 → −864 (65.1), −868 → −876 (65.6), −880 → −886 (65.6) | 4 m hops rising 0.5 m. Spring 1 at (26.5, 65.6, −883.5), r 1.6 |
+| S3 | **Bonus ring** | (26.5, 73.6, −889), r 1.8 | In spring 1's arc; **+1 Win** (`ZONE10_BONUS`) once per run |
+| S4 | **Garden island** | x 21.5 → 31.5, z −894 → −904, top 69.6 | Fountains and hedges; the spring's landing room is z −894 → −898 |
+| S5 | **Rainbow bridge** | x 25 → 28, z −906 → −920, tops 70 → 71 → 70 | Seven coloured slabs, a 0.4 m step each |
+| S6 | **Windmill island** | x 21.5 → 31.5, z −922 → −934, top 70.1 | Windmill tower at (23, −926), 7 m, blades turning; spring 2 at (27.5, 70.1, −931.5) |
+| S7 | **Porch & summit** | porch x 20.5 → 32.5, z −942 → −945, top 74.1; summit x 18.5 → 34.5, z −945 → −968, top 74.6 | Yellow pad (23.5, −949): **+350 Wins** (`ZONE10_WIN`). Cyan "+700 Wins" pad (21, −954). x2.5 Hair treadmill (30.5, −952), console to the north. Gazebo at (26.5, −960), r 3.5, gold posts |
+| S8 | **Cloud gate / Zone 11 entrance** | pillars x 22.5 / 30.5, z −966.5; exit x 23.5 → 29.5, z −968, top 74.6 | Gold arch over the pillars, "JUNGLE RUINS →" sign |
+
+---
+
+# Zone 11 — JUNGLE RUINS
+
+Continues north from Zone 10's cloud gate (z −968, top y 74.6). An acid-green swamp (y 71.1) runs between 4 m-thick jungle walls (x 9.5 … 13.5 and 39.5 … 43.5, to y 88.6) topped with canopy blobs and tree trunks, with hanging vines, ferns, broken pillars, glowing mushrooms, tiki torches and fireflies. Two **stone rafts** slide sideways across the swamp (3.5 m either way, opposite phases): hop them as they line up. The mid landing carries the **+1 Win** ring (`ZONE11_BONUS`) and two totems. A wooden **ferry** shuttles north to the temple foot, where two stone serpents flank the temple: two carved tiers, each climbed by a **vine panel** (`climbAt`, hold a move key against it). The temple top holds the golden idol, the yellow pad (**+500 Wins**, `ZONE11_WIN`, once per run), a cyan "+1000 Wins" pad, the x3 Hair treadmill (`jungle` theme) and the doorway under a serpent head into Zone 12 (`ZONE11_EXIT`). Falling below y 72.6 respawns you on the last checkpoint (terrace, mid landing, temple foot, temple top; `ZONE11_SPAWN` is (26.5, 74.7, −971)).
+
+| # | Landmark | Position (x, y, z) | Notes |
+|---|----------|--------------------|-------|
+| J1 | **Terrace** | x 19.5 → 33.5, z −968 → −980, top 74.6 | "RECOMMENDED / LEVEL 270" sign; torches |
+| J2 | **Stone rafts** | 4 × 4 m; raft A z −988.5 → −984.5, top 74.8, x 26.5 ± 3.5; raft B z −995 → −991, top 75.0, x 26.5 ∓ 3.5 | Swing at 0.55 rad/s; 2-4.5 m hops when aligned |
+| J3 | **Mid landing** | x 20.5 → 32.5, z −997 → −1009, top 75.1 | Ring (26.5, 76.8, −999), r 1.3: **+1 Win** (`ZONE11_BONUS`). Totems at x 22.1 / 30.9 |
+| J4 | **Ferry** | 5 × 5 m, top 75.1, z centre −1012 … −1023 | Shuttles at 0.4 rad/s between the landing and the temple foot |
+| J5 | **Temple foot** | x 15.5 → 37.5, z −1028 → −1040, top 75.1 | Serpents at x 19.5 / 33.5, z −1032 |
+| J6 | **Tiers** | riser 1 face z −1040, ledge z −1040 → −1046, top 81.1, panel x 28.5; riser 2 face z −1046, ledge → −1052, top 87.1, panel x 24.5 | Vine panels 4 m wide, 6 m climbs (`PHYSICS.climbSpeed`) |
+| J7 | **Temple top** | x 17.5 → 35.5, z −1052 → −1070, top 87.1 | Yellow pad (23.5, −1057): **+500 Wins** (`ZONE11_WIN`). Cyan pad (21, −1063). x3 treadmill (30.5, −1060). Idol dais (33, −1065). Four pillars with torches |
+| J8 | **Serpent doorway / Zone 12 entrance** | x 24 → 29, z −1070 → −1074, 4.5 high, top 87.1 | Stone serpent head with glowing eyes over it |
+
+---
+
+# Zone 12 — MAGMA FORGE
+
+Continues north through Zone 11's serpent doorway (z −1074, top y 87.1) into an enclosed hall inside a volcano: obsidian walls (x 11.5 … 14.5 and 38.5 … 41.5, to y 109.1) veined with glowing seams, rune pillars with strip lights, a rock ceiling split by a lava crack, lava falls on the walls, chains and cauldrons from the ceiling, embers in the air, and a lava lake at y 83.1. Four **sinking blocks** cross it: each sinks 2.6 m at 1.4 m/s while stood on (feet below y 85.5 = burned) and rises again once left. The forge deck holds a furnace, an anvil and the **+1 Win** ring (`ZONE12_BONUS`). Three **spinning gears** (r 3, square walkable tops of half-width 2.5) bridge the lava to the forge hall: the yellow pad (**+750 Wins**, `ZONE12_WIN`, once per run), a cyan "+1500 Wins" pad, the x4 Hair treadmill (`forge` theme), the great hammer, a crucible and the iron door into Zone 13 (`ZONE12_EXIT`). The lava respawns you on the last checkpoint (deck, forge deck, forge hall; `ZONE12_SPAWN` is (26.5, 87.2, −1077)).
+
+| # | Landmark | Position (x, y, z) | Notes |
+|---|----------|--------------------|-------|
+| M1 | **Iron deck** | x 19.5 → 33.5, z −1074 → −1086, top 87.1 | "RECOMMENDED / LEVEL 300" sign |
+| M2 | **Sinking blocks** | 4 × 4 m, top 87.4: (24.5, −1090), (28.5, −1097), (24.5, −1104), (28.5, −1111) | 2-3 m hops; ~1.4 s on one before it burns you |
+| M3 | **Forge deck** | x 17.5 → 35.5, z −1118 → −1130, top 87.4 | Ring (26.5, 89.1, −1120), r 1.3: **+1 Win** (`ZONE12_BONUS`). Furnace (21, −1125), anvil (32.5, −1124) |
+| M4 | **Gears** | centres (26.5, −1135), (26.5, −1142), (26.5, −1149), top 87.4 | Alternate directions at 0.5 rad/s; 2-2.5 m hops |
+| M5 | **Forge hall** | x 16.5 → 36.5, z −1154 → −1174, top 87.4 | Yellow pad (23.5, −1160): **+750 Wins** (`ZONE12_WIN`). Cyan pad (21, −1166). x4 treadmill (30.5, −1163). Hammer (34.5, −1169), crucible (19, −1170) |
+| M6 | **Iron door / Zone 13 entrance** | x 24 → 29, z −1174 → −1178, 4.5 high, top 87.4 | Iron frame and lintel, yellow arrow |
+
+---
+
+# Zone 13 — NEON SKYLINE
+
+Continues north through Zone 12's iron door (z −1178, top y 87.4) onto the rooftops of a night city under the dome Zone 14 builds: towers with glowing window grids rise from a dark street at y 57.4, neon strips run along every roof edge, hologram signs float over the skyline and hover cars cruise at y 97. Roof A has a helipad; roof B is swept by two knee-high **laser beams** (0.5 m up, feet below 0.7 m = zapped) crossing at its middle: jump each as it passes. A **hover taxi** shuttles from roof C to roof D (the **+1 Win** ring `ZONE13_BONUS` on its front, two more lasers). Past roof D the street is 28 m wide: **only the hair cable crosses**, to the blue anchor cube on the billboard over roof E, the Hair Tower: the yellow pad (**+1000 Wins**, `ZONE13_WIN`, once per run), a cyan "+2000 Wins" pad, the x5 Hair treadmill (`neon` theme), a neon crown, a beacon mast and the lift into Zone 14 (`ZONE13_EXIT`). A fall (below y 81.4) or a zap respawns you on the last checkpoint (roofs A, C, D, E; `ZONE13_SPAWN` is (26.5, 87.5, −1181)).
+
+| # | Landmark | Position (x, y, z) | Notes |
+|---|----------|--------------------|-------|
+| N1 | **Roof A** | x 19.5 → 33.5, z −1178 → −1194, top 87.4 | Helipad mark, AC unit, mast; "RECOMMENDED / LEVEL 330" sign |
+| N2 | **Roof B** | x 20.5 → 32.5, z −1198 → −1218, top 87.9 | Lasers sweep z −1200 → −1216 at 0.6 rad/s, opposite phases |
+| N3 | **Roof C & taxi** | roof x 21.5 → 31.5, z −1222 → −1232, top 88.4; taxi 4 × 4 m, top 88.4, z centre −1235.5 … −1248.5 | Taxi stop kerb; the taxi shuttles at 0.45 rad/s |
+| N4 | **Roof D** | x 19.5 → 33.5, z −1253 → −1273, top 88.9 | Ring (26.5, 90.6, −1255.5), r 1.3: **+1 Win** (`ZONE13_BONUS`). Lasers sweep z −1256 → −1270. Water tank (21.5, −1270) |
+| N5 | **The street** | z −1273 → −1301 | 28 m: cable only; "HAIR CABLE ONLY / SPACE = ZIP" sign over it |
+| N6 | **Billboard** | (26.5, −1302.5), posts to y 101.4, panel 8 × 5 | "HAIR TOWER" sign; blue anchor cube at (26.5, 99.5, −1301.7) with an arrow under it |
+| N7 | **Roof E (Hair Tower)** | x 17.5 → 35.5, z −1301 → −1328, top 89.4 | Yellow pad (23.5, −1308): **+1000 Wins** (`ZONE13_WIN`). Cyan pad (21, −1314). x5 treadmill (30.5, −1311). Crown (20.5, −1320), mast (33.5, −1322) |
+| N8 | **Lift / Zone 14 entrance** | x 24 → 29, z −1325 → −1328, 4 high, top 89.4 | "STAR SUMMIT →" sign |
+
+---
+
+# Zone 14 — STAR SUMMIT
+
+Continues north through Zone 13's lift (z −1328, top y 89.4) onto a moon base in space. This zone builds the **night dome** (an ellipsoid 180 × 180 × 312 m centred at (26.5, 82.4, −1331), shown only once the player is within 12 m of Zone 13's entrance) with 900 stars, three planets, a sun and comets; small asteroids drift about. Gravity is `PHYSICS.spaceGravity` (0.45) throughout: a jump rises ~2.8 m and carries ~13 m. Hop three asteroids (8 m gaps rising 1.5 m) to a purple planet with three **rocks orbiting** it (r 12 m, 0.3 rad/s, a rock every 7 s): hop on at the orbit's south point, ride round through the **+1 Win** ring (`ZONE14_BONUS`) at its east point and hop off at the north point to the last two asteroids and the summit. The Star Palace there (white columns, gold dome, throne) holds the yellow pad (**+2000 Wins**, `ZONE14_WIN`, once per run), which sends you home after 1.8 s: the last stage. A cyan "+5000 Wins" pad is decoration; the x10 Hair treadmill (`galaxy` theme) grows hair like the Hub's; the back wall carries the "WORLD 2: WONDER WORLDS / COMING SOON" sign. Falling below y 81.4 respawns you on the last checkpoint (base, third asteroid, far asteroid, summit; `ZONE14_SPAWN` is (26.5, 89.5, −1331)). `WORLD_BOUNDS.minZ` (−1500) stays north of the back wall (z −1484).
+
+| # | Landmark | Position (x, y, z) | Notes |
+|---|----------|--------------------|-------|
+| X1 | **Moon base** | x 18.5 → 34.5, z −1328 → −1344, top 89.4 | Glass dome (21.5, −1339), dish (32, −1341), flag; "RECOMMENDED / LEVEL 360" and "LOW GRAVITY! / BIG JUMPS" signs |
+| X2 | **Asteroids 1-3** | 6 m wide; z −1352 → −1358 (90.9), −1366 → −1372 (92.4), −1380 → −1386 (93.9) | 8 m hops rising 1.5 m |
+| X3 | **Planet & orbit** | planet (26.5, 91.4, −1402), r 5; orbit r 12, rock tops 94.4, 4 × 4 m | South point z −1390, north point z −1414; ring (38.5, 96.1, −1402), r 1.5: **+1 Win** (`ZONE14_BONUS`) |
+| X4 | **Asteroids 4-5** | z −1418 → −1424 (95.4), −1432 → −1438 (96.9) | 2 m off the orbit, then 8 m hops |
+| X5 | **Summit & Star Palace** | rock x 14.5 → 38.5, z −1446 → −1480, top 98.4; palace floor x 17.5 → 35.5, z −1450 → −1476, top 98.7 | Yellow pad (23.5, −1456): **+2000 Wins** (`ZONE14_WIN`), then home. Cyan pad (21, −1462). x10 treadmill (30.5, −1459). Columns at x 18.5 / 34.5; gold dome and throne at (26.5, −1473) |
+| X6 | **Back wall** | x 14.5 → 38.5, z −1480 → −1484, to y 110.4 | "WORLD 2: WONDER WORLDS / COMING SOON" sign; no way on |

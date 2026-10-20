@@ -1,5 +1,5 @@
 import { Clock, Group, PCFSoftShadowMap, PerspectiveCamera, Scene, SRGBColorSpace, Vector3, WebGLRenderer } from 'three'
-import { ANIM, CAMERA, HAIR, PHYSICS, SPAWN, SPAWN_FACING, TOUCH } from './config.js'
+import { ANIM, CAMERA, HAIR, PHYSICS, SPAWN, SPAWN_FACING, TOUCH, TUTORIAL } from './config.js'
 import * as bloxity from './bloxity.js'
 import { inputState, install as installInput, refreshMove } from './input.js'
 import { install as installTouch } from './touch.js'
@@ -39,6 +39,7 @@ import { CUTS } from './game/cosmetics.js'
 import { createSalon } from './salon/salon.js'
 import { initNet, net, onHydrated, sendPose, syncAvatar } from './net.js'
 import { createRemotePlayers } from './remotePlayers.js'
+import { createTutorial } from './tutorial.js'
 
 // --- Bloxity + player state -----------------------------------------------
 bloxity.init()
@@ -117,7 +118,7 @@ const runTrail = createTrail(avatarLayer) // the ribbon behind the runner
 // --- HUD + progression ------------------------------------------------------
 const hud = createHud({
   onMenu: bloxity.showMenu,
-  onSkipQuest: () => game.skipQuest(),
+  onSkipQuest: () => (tutorial.active() ? tutorial.skip() : game.skipQuest()),
   onTeleport: (spot) => respawn(spot),
   onOpenSalon: () => salon.open(),
   // Teleport window: one stage per zone (Hub, Lava Run, Ice Lake, Desert Canyon, Purple Palace, Teal Citadel, Amber Halls, Violet Tower, Crystal Cavern, Sky Gardens, Jungle Ruins, Magma Forge, Neon Skyline, Star Summit).
@@ -168,13 +169,31 @@ const playerName = () => {
   const u = bloxity.authState.user
   return (u && (u.displayName || u.username || u.name)) || 'You'
 }
+// The new-player tutorial borrows the quest pill until it is finished or skipped.
+const showQuest = (s) => {
+  const q = game.QUESTS[s.quest]
+  hud.setQuest(s.quest, game.QUESTS.length, q ? q.text : 'All quests done! Keep growing your *hair*!')
+}
+const firstTreadmill = lobby.treadmills[0].center
+const firstStyle = lobby.shopSpot(TUTORIAL.style)
+const tutorial = createTutorial(scene, hud, {
+  targets: {
+    treadmill: { x: firstTreadmill.x, y: firstTreadmill.y - 1, z: firstTreadmill.z, marked: true }, // the lobby's own arrow already floats over it
+    portal: { x: 0, y: 0, z: HUB_NORTH_Z - 2 }, // just past the doorway, where the portal flag trips
+    winPad: { x: LAVA_FINISH.padX, y: LAVA_FINISH.top, z: LAVA_FINISH.z },
+    shop: { x: firstStyle.x, y: firstStyle.y - 1, z: firstStyle.z },
+  },
+  onBelt: () => treadmillRunning,
+  inHub: () => player.position.z > HUB_NORTH_Z,
+  cableActive: () => cable.active,
+  onEnd: () => showQuest(game.state),
+})
 
 game.onChange((s) => {
   hud.setState(s)
   hud.setHair(s.hair)
   hud.setLevel(s.level, s.xp, game.levelRequirement(s.level))
-  const q = game.QUESTS[s.quest]
-  hud.setQuest(s.quest, game.QUESTS.length, q ? q.text : 'All quests done! Keep growing your *hair*!')
+  if (!tutorial.active()) showQuest(s)
   hud.setStats([
     ['Hair', s.hair.toLocaleString()],
     ['Best Hair', s.bestHair.toLocaleString()],
@@ -207,7 +226,7 @@ game.onEvent((e) => {
     hud.toast(`LEVEL UP! Level ${e.level}`, '#5fe0ff')
     hud.chat(`<b>[Server]</b> You reached Level ${e.level}!`)
   } else if (e.type === 'quest') {
-    hud.toast('Quest Complete!', '#b6ff7a')
+    if (!tutorial.active()) hud.toast('Quest Complete!', '#b6ff7a') // the quests advance quietly under the tutorial
   } else if (e.type === 'win') {
     hud.toast(`ESCAPED! +${e.amount} Win${e.amount > 1 ? 's' : ''}`, '#ffd21a')
     hud.chat(`<b>[Server]</b> You escaped! Total wins: ${e.wins}`)
@@ -565,6 +584,7 @@ renderer.setAnimationLoop(() => {
   updateTreadmills(dt)
   updateZones(dt, time)
   updateInteraction()
+  tutorial.update(time)
   lobby.update(dt, time)
   hud.setBoost(Math.max(0, Math.ceil((game.state.boostUntil - Date.now()) / 1000)))
 

@@ -357,5 +357,25 @@ export const NET = {
   remoteLerp: 12, // 1/s: how fast remote players ease toward their last relayed pose
   maxRemotes: 24, // other players drawn at once (nearest first)
   remoteFade: 90, // m: farther players are hidden
+  hairNearDist: 25, // m: remote players closer than this step their hair at hairNearHz
+  hairNearHz: 30, // Hz
+  hairFarHz: 10, // Hz: farther remote players' hair (cheaper)
   nameHeight: 2.9, // m above a remote player's feet the name tag floats
+  tutorialWait: 10, // s the tutorial waits for the account's save before starting from the local one
+}
+
+// --- New-player tutorial (tutorial.js, tutorialLogic.js) ---------------------------------------------------
+// The step is saved with the account (state.tutorial); a save from before the tutorial counts as finished.
+export const DISABLE_TUTORIAL = import.meta.env.VITE_DISABLE_TUTORIAL === 'true'
+export const TUTORIAL = {
+  done: 7, // state.tutorial value meaning "finished" (backend constants.ts TUTORIAL_DONE must match)
+  level: 3, // step 1: run on the treadmill up to this level
+  style: 'blueberry', // step 5: the hair style the player is sent to buy
+  completeMs: 3500, // ms the "Tutorial Complete!" pill stays up
+  spacing: 1.1, // m between trail arrows
+  speed: 1.8, // m/s the trail crawls toward the target
+  maxArrows: 140, // trail arrows drawn at most
+  hideWithin: 2.5, // m from the target where the trail disappears (the beacon stays)
+  lift: 0.3, // m the trail floats over the line from the player's feet to the target
+  beaconHeight: 4.5, // m above the target the big arrow floats
 }

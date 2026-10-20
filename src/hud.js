@@ -68,12 +68,24 @@ const CSS = `
 .hud-quest::before { content: ''; position: absolute; inset: 4px; border-radius: 36px; background-image: radial-gradient(rgba(255,255,255,0.06) 30%, transparent 32%); background-size: 22px 22px; pointer-events: none; }
 .hud-quest.pop { transform: translateX(-50%) scale(calc(var(--s) * 1.06)); }
 .hud-quest .badge { flex: none; min-width: 74px; height: 52px; border-radius: 26px; display: grid; place-items: center; font-size: 30px; background: linear-gradient(#ffe46b, #ffb800); border: 3px solid #4a3000; box-shadow: inset 0 -4px 0 rgba(160,90,0,0.5); }
-.hud-quest .text { flex: 1; text-align: center; font-size: 31px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-quest .lines { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.hud-quest .text { width: 100%; text-align: center; font-size: 31px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-quest .hint { max-width: 100%; font-size: 21px; font-weight: 600; color: #cfe0ff; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-quest .hint:empty { display: none; }
 .hud-quest .hl { color: #ffd21a; }
 .hud-quest .skip { position: absolute; top: -2px; left: 50%; transform: translateX(-50%); padding: 0 8px; font-size: 15px; font-weight: 600; color: rgba(255,255,255,0.55); }
 .hud-quest .skip:hover { color: #fff; }
 .hud-quest.done .skip { display: none; }
 .hud-quest.done .badge { background: linear-gradient(#b6ff7a, #33d11c); border-color: #154a00; }
+/* New-player tutorial (tutorial.js) drives the same pill: a TUTORIAL tag, a pulsing gold rim and a real Skip button under it. */
+.hud-quest .tag { display: none; position: absolute; top: -20px; left: 40px; padding: 1px 14px; border-radius: 14px; font-size: 19px; letter-spacing: 2px; background: linear-gradient(#ffe46b, #ffb800); border: 3px solid #4a3000; }
+.hud-quest.tutorial .tag { display: block; }
+.hud-quest.tutorial { border-color: #ffb800; animation: tut-rim 1.4s ease-in-out infinite; }
+.hud-quest.tutorial.done { border-color: #33d11c; animation: none; }
+.hud-quest.tutorial.done .tag { background: linear-gradient(#b6ff7a, #33d11c); border-color: #154a00; }
+.hud-quest.tutorial .skip { top: auto; bottom: -34px; padding: 2px 18px; font-size: 19px; color: #fff; border-radius: 14px; background: linear-gradient(#ff6a5a, #d8352e); border: 3px solid #5a0f0c; }
+.hud-quest.tutorial .skip::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, calc(88px / var(--s))); height: max(100%, calc(44px / var(--s))); transform: translate(-50%, -50%); } /* ≥44 px tap area at any HUD scale */
+@keyframes tut-rim { 50% { box-shadow: inset 0 3px 0 rgba(255,255,255,0.12), 0 0 0 4px rgba(255,210,58,0.85), 0 0 22px 6px rgba(255,190,30,0.55); } }
 
 /* Left column: Rebirth / Wins counters over the 2x3 button grid. */
 .hud-left { position: absolute; left: calc(30px * var(--s) + var(--l)); top: calc(215px * var(--s) + var(--tp)); transform: scale(var(--s)); transform-origin: top left; display: flex; flex-direction: column; gap: 10px; }
@@ -231,11 +243,14 @@ const CSS = `
 #hud.compact .hud-right { transform: scale(max(var(--s), 0.5)); } /* keeps x2 Hair ~44 px tall on the smallest phones */
 #hud.compact .hud-quest { width: 540px; }
 #hud.compact .hud-quest .text { font-size: 26px; line-height: 1.1; white-space: normal; }
+#hud.compact .hud-quest .hint { font-size: 20px; white-space: normal; }
+#hud.compact .hud-quest.tutorial .skip { font-size: 24px; bottom: -40px; }
 #hud.compact .hud-prompt { bottom: calc(130px * var(--s) + var(--bt)); }
 /* Portrait: the quest pill spans the width, so the columns start below it, and EVENT drops its label to fit beside the top bar. */
 #hud.compact.portrait .hud-event { width: 56px; padding: 0 !important; justify-content: center; }
 #hud.compact.portrait .hud-event span { display: none; }
 #hud.compact.portrait .hud-left, #hud.compact.portrait .hud-right { top: calc(240px * var(--s) + var(--tp)); }
+#hud.compact.portrait:has(.hud-quest.tutorial) :is(.hud-left, .hud-right) { top: calc(300px * var(--s) + var(--tp)); } /* room for the hint and Skip tutorial */
 /* Hair Salon open (salon/): only the top bar, EVENT and toasts stay; the salon overlay draws the rest. */
 #hud.salon :is(.hud-quest, .hud-left, .hud-bottom, .hud-right, .hud-prompt, .hud-chat) { display: none !important; }
 `
@@ -635,7 +650,7 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
   const eventBtn = el('button', 'hud-event', `${CROWN_ICON}<span>EVENT</span>`)
   root.append(top, eventBtn)
 
-  const quest = el('div', 'hud-quest', `<button class="skip">Skip</button><div class="badge stroke">1/6</div><div class="text stroke"></div>`)
+  const quest = el('div', 'hud-quest', `<button class="skip">Skip</button><div class="tag stroke">TUTORIAL</div><div class="badge stroke">1/6</div><div class="lines"><div class="text stroke"></div><div class="hint"></div></div>`)
   root.appendChild(quest)
 
   // --- Left: counters + button grid
@@ -1150,15 +1165,22 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       set('canRebirth', game.canRebirth() || game.canPrestige() || game.anyUpgradeReady(), (ok) => q('.hud-tile.rebirth').classList.toggle('alert', ok))
       renderOpen()
     },
-    setQuest(index, total, text) {
-      set('quest', `${index}|${text}`, () => {
+    // `opts.tutorial` switches the pill to the new-player tutorial look; `opts.hint` is a smaller second line.
+    // Live counters in the text repaint it without replaying the pop, which only marks a new step.
+    setQuest(index, total, text, { tutorial = false, hint = '' } = {}) {
+      set('quest', `${tutorial}|${index}|${text}|${hint}`, () => {
         const done = index >= total
         quest.classList.toggle('done', done)
+        quest.classList.toggle('tutorial', tutorial)
+        quest.querySelector('.skip').textContent = tutorial ? 'Skip tutorial' : 'Skip'
         quest.querySelector('.badge').textContent = `${Math.min(index + 1, total)}/${total}`
         const safe = text.replace(/[<>&]/g, '')
         quest.querySelector('.text').innerHTML = safe.replace(/\*(.+?)\*/g, '<span class="hl">$1</span>')
-        quest.classList.add('pop')
-        setTimeout(() => quest.classList.remove('pop'), 250)
+        quest.querySelector('.hint').textContent = hint
+        set('questStep', `${tutorial}|${index}`, () => {
+          quest.classList.add('pop')
+          setTimeout(() => quest.classList.remove('pop'), 250)
+        })
       })
     },
     setHair(n) {
