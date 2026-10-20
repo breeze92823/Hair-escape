@@ -4,6 +4,7 @@
 import { BoxGeometry, CanvasTexture, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, SRGBColorSpace } from 'three'
 import { makeCanvas, onFontReady, outlinedText, FONT } from './paint.js'
 import { label } from './labels.js'
+import { net, onLeaderboard } from '../net.js'
 
 // Made-up rival players (deterministic, so the boards look the same every load).
 const RIVALS = [
@@ -108,15 +109,19 @@ export function buildLeaderboards(parent, addCollider, wallZ) {
   })
 
   let me = { name: 'You', state: null }
+  // The server's top 10 (net.js) once it arrives, else the made-up rivals; the player is always on the board.
+  const hueOf = (name) => [...name].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7)
   const redraw = (force) => {
     if (!me.state) return
     for (const b of boards) {
+      const live = net.leaderboard[b.key]
+      const table = live?.length ? live.filter((r) => r.id !== net.sessionId).map((r) => ({ name: r.name, value: r.value, me: false, hue: hueOf(r.name) })) : b.table
       const mine = { name: me.name, value: b.stat(me.state), me: true, hue: 40 }
-      const ranked = [...b.table, mine].sort((a, c) => c.value - a.value).map((r, i) => ({ ...r, rank: i + 1 }))
+      const ranked = [...table, mine].sort((a, c) => c.value - a.value).map((r, i) => ({ ...r, rank: i + 1 }))
       // Always show the player: off the top 10, they take the last row with their real rank.
       const rows = ranked.slice(0, 10)
       if (!rows.some((r) => r.me)) rows[9] = ranked.find((r) => r.me)
-      const key = `${mine.name}|${mine.value}`
+      const key = `${mine.name}|${mine.value}|${live?.length ? JSON.stringify(live.map((r) => [r.name, r.value])) : ''}`
       if (!force && key === b.lastKey) continue
       b.lastKey = key
       paintBoard(b.ctx, b, rows)
@@ -124,6 +129,7 @@ export function buildLeaderboards(parent, addCollider, wallZ) {
     }
   }
   onFontReady(() => redraw(true))
+  onLeaderboard(() => redraw(false))
 
   return {
     update(state, name) {

@@ -7,12 +7,12 @@
 // you back on the entrance. Procedural like Zone 2 (voxel canvas textures,
 // boxes, cones).
 import {
-  BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Group, Mesh,
-  MeshStandardMaterial, PlaneGeometry, RepeatWrapping, SRGBColorSpace,
+  BoxGeometry, ConeGeometry, CylinderGeometry, Group, Mesh,
+  MeshStandardMaterial, PlaneGeometry,
 } from 'three'
 import { LAVA_FINISH, buildTree, kit, voxelTexture } from './lavaPath.js'
 import { label } from './lobby/labels.js'
-import { makeCanvas } from './lobby/paint.js'
+import { buildTreadmill } from './lobby/treadmill.js'
 
 export const ZONE3_NAME = 'ICE LAKE'
 export const ZONE3_WIN = 3 // wins for stepping on the goal pad (advertised on the Lava Run trophy)
@@ -42,9 +42,8 @@ const PATH = [
 const GOAL = { z0: -147, z1: LAKE.z1, w: 14, top: 1.6 } // the ice platform at the end of the lake
 const goalZ = (GOAL.z0 + GOAL.z1) / 2
 const PAD = { x: -3.2, size: 3 } // the yellow win pad, left of centre
-const TREAD = { x: 3.6, len: 3.6, w: 2 } // the x1.1 Hair treadmill, right of centre (m)
+const TREAD = { x: 3.4, len: 4.8, w: 2.4, mult: 1.1 } // the x1.1 Hair treadmill, right of centre (m); its console faces north
 const COLUMN_H = 5 // m: the tall ice columns on the canyon-side corners
-const BELT_SPEED = 0.6 // texture repeats/s the treadmill belt drifts
 
 // Zone 4 builds its entrance off the goal platform.
 export const ZONE3_GOAL = { z: goalZ, z0: GOAL.z0, z1: GOAL.z1, w: GOAL.w, top: GOAL.top, padX: PAD.x }
@@ -213,20 +212,7 @@ function buildMountains(k) {
 // --- The far end: the goal platform, which doubles as Zone 4's entrance --------
 // Snow-white ice platform with tall ice columns on the canyon-side corners, the
 // yellow win pad (a trophy spinning over it) on the left, an ice throne behind
-// it, and a decorative x1.1 Hair treadmill on the right.
-function stripeTexture() {
-  const c = makeCanvas(64, 16)
-  const ctx = c.getContext('2d')
-  ctx.fillStyle = '#1d2433'
-  ctx.fillRect(0, 0, 64, 16)
-  ctx.fillStyle = '#e8f2ff'
-  for (let x = 4; x < 64; x += 16) ctx.fillRect(x, 0, 6, 16)
-  const t = new CanvasTexture(c)
-  t.wrapS = t.wrapT = RepeatWrapping
-  t.colorSpace = SRGBColorSpace
-  return t
-}
-
+// it, and an x1.1 Hair treadmill (the Hub's model and behaviour) on the right.
 function buildGoal(k) {
   const d = GOAL.z0 - GOAL.z1
   k.voxBox({ x: 0, z: goalZ, w: GOAL.w, d, y1: GOAL.top - 0.7, side: tex.deep, cell: 1.4, collide: false })
@@ -272,18 +258,15 @@ function buildGoal(k) {
   k.voxBox({ x: tx, z: tz - 0.55, w: 1.6, d: 0.35, y0: GOAL.top + 0.9, y1: GOAL.top + 2.6, side: tex.ice, top: tex.snow, cell: 0.8, collide: false })
   for (const s of [-1, 1]) k.voxBox({ x: tx + s * 0.72, z: tz, w: 0.25, d: 1.2, y0: GOAL.top + 0.9, y1: GOAL.top + 1.4, side: tex.snow, cell: 0.5, collide: false })
 
-  // x1.1 Hair treadmill (decoration): light-blue frame, striped belt drifting toward +X.
-  const frame = k.std('#7cc4f5', { roughness: 0.5 })
-  k.mesh(new BoxGeometry(TREAD.len + 0.4, 0.3, TREAD.w + 0.3), frame, TREAD.x, GOAL.top + 0.15, goalZ)
-  k.addCollider(TREAD.x, goalZ, TREAD.len + 0.4, TREAD.w + 0.3, GOAL.top + 0.32)
-  const belt = stripeTexture()
-  belt.repeat.set(TREAD.len / 1.2, 1)
-  k.mesh(new BoxGeometry(TREAD.len, 0.06, TREAD.w - 0.4), new MeshStandardMaterial({ map: belt, roughness: 0.9 }), TREAD.x, GOAL.top + 0.32, goalZ, { cast: false })
-  const console_ = k.std('#2f6fd6', { roughness: 0.45 })
-  const cx = TREAD.x - TREAD.len / 2 - 0.1
-  for (const s of [-1, 1]) k.mesh(new BoxGeometry(0.14, 1.2, 0.14), console_, cx, GOAL.top + 0.9, goalZ + s * (TREAD.w / 2 - 0.1))
-  k.mesh(new BoxGeometry(0.3, 0.4, TREAD.w), console_, cx, GOAL.top + 1.55, goalZ)
-  return { trophy, belt }
+  // x1.1 Hair treadmill: runs like the Hub's, console to the north so the runner faces up the canyon.
+  const treadmill = buildTreadmill(k.g, k.addCollider, {
+    x: TREAD.x, z: goalZ, y: GOAL.top, yaw: -Math.PI / 2, length: TREAD.len, width: TREAD.w, theme: 'ice', mult: TREAD.mult, labelY: 3.9,
+    labels: [
+      { text: '[x2 Boost]', size: 0.35, fill: '#ff5a5a', stroke: '#3a0a0a' },
+      { text: `x${TREAD.mult} Hair`, size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' },
+    ],
+  })
+  return { trophy, treadmill }
 }
 
 // `nextWin`: the wins the next zone's finish awards, advertised on the trophy sign.
@@ -296,7 +279,7 @@ export function buildZone3(scene, addCollider, { nextWin = 0 } = {}) {
   buildLake(k)
   buildBanks(k)
   buildMountains(k)
-  const { trophy, belt } = buildGoal(k)
+  const { trophy, treadmill } = buildGoal(k)
 
   label(g, [
     { text: 'RECOMMENDED', size: 0.45, fill: ['#bff4ff', '#2fd8ff'], stroke: '#0a2a5a' },
@@ -304,20 +287,17 @@ export function buildZone3(scene, addCollider, { nextWin = 0 } = {}) {
   ], [0, 3.8, -117], { unit: 1.4 })
   label(g, [{ text: `+${ZONE3_WIN} Wins`, size: 0.7, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [PAD.x, GOAL.top + 0.75, goalZ + 1.3], { unit: 0.9 })
   label(g, [{ text: `🏆 +${nextWin} Wins`, size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' }], [PAD.x, GOAL.top + 2.75, goalZ], { unit: 0.9 })
-  label(g, [
-    { text: '[x2 Boost]', size: 0.35, fill: '#ff5a5a', stroke: '#3a0a0a' },
-    { text: 'x1.1 Hair', size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' },
-  ], [TREAD.x, GOAL.top + 2.6, goalZ], { unit: 0.9 })
 
   let won = false
   return {
+    treadmills: [treadmill], // main.js runs them with the Hub's
     // From the entrance (the Lava Run finish) to the goal platform. main.js checks this before the Lava Run.
     contains: (p) => p.z < LAVA_FINISH.z0 && p.z > FAR_Z && Math.abs(p.x) < GLACIER.x1,
     // Returns 'fell' or 'finish' when the player triggers one.
     update(dt, time, p) {
       trophy.rotation.y = time * 1.5
       trophy.position.y = GOAL.top + 1.4 + Math.sin(time * 2) * 0.1
-      belt.offset.x = -time * BELT_SPEED
+      treadmill.update(dt, time)
       const inLake = Math.abs(p.x) < LAKE.halfW && p.z < LAKE.z0 && p.z > LAKE.z1
       if (inLake && p.y < WATER_Y + 0.15) return 'fell'
       const onPad = Math.abs(p.x - PAD.x) < PAD.size / 2 && Math.abs(p.z - goalZ) < PAD.size / 2

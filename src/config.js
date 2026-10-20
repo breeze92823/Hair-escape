@@ -7,7 +7,7 @@ export const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true'
 // --- World ------------------------------------------------------------------
 export const GROUND_Y = 0
 export const GROUND_SIZE = 640 // square ground centred on the origin
-export const WORLD_BOUNDS = { minX: -195, maxX: 195, minZ: -380, maxZ: 195 } // north reaches past the back of Zone 5's purple palace (z -375)
+export const WORLD_BOUNDS = { minX: -195, maxX: 195, minZ: -1500, maxZ: 195 } // north reaches past the back wall of Zone 14's Star Palace (z ~-1484)
 export const SPAWN = { x: 0, y: 0.3, z: 2 } // lobby, on the red carpet facing the START portal
 export const SPAWN_FACING = Math.PI // yaw the character faces on spawn (PI = toward -Z)
 
@@ -22,6 +22,8 @@ export const PHYSICS = {
   stepUp: 0.6, // m: box tops this far above the feet are walked onto, not collided with
   climbSpeed: 6, // m/s up a climbing panel while a move key is held
   climbSlide: 1.5, // m/s max slide down a climbing panel with no key held
+  bounceSpeed: 19, // m/s up off a cloud spring (Zone 10): ~8 m high, 10-11 m gaps at a run
+  spaceGravity: 0.45, // gravity scale in the Star Summit (Zone 14): floaty jumps that cross 8 m gaps
   killY: -30, // fell this far below the ground: respawn
 }
 export const PLAYER_DIMS = { radius: 0.4, height: 1.8 }
@@ -61,6 +63,7 @@ export const HAIR = {
   startLength: 3,
   minLength: 1,
   maxLength: 13,
+  visualScale: 0.5, // share of the grown length (hang and floor trail) drawn on the avatar; the cable still reaches with all of it
   hangPerLength: 0.4, // rig units of hang per length point
   maxSegment: 0.6, // rig units; longer hair adds segments instead of stretching them
   chainRootY: 1.0, // where the hanging section starts, in head-local y (head spans 0..1.6)
@@ -69,28 +72,36 @@ export const HAIR = {
 }
 
 // Hair cable (hairCable.js): Space shoots the hair tip out of the head; while it
-// flies the camera follows it and right-drag (or pointer-lock mouse / touch drag)
-// steers it, until it sticks to a surface or the hair runs out. The player then
+// flies the look input (pointer-lock mouse, right-drag, touch drag) and WASD/arrows
+// steer it, the camera turning with the steering so the view always looks where the
+// tip is heading, until it sticks to a surface or the hair runs out. The player then
 // hangs beneath it and travels the path it took to the anchor.
 // Reach grows with the hair: base + per length point + every metre of floor trail.
 export const GRAPPLE = {
   baseReach: 8, // m
   reachPerLength: 2, // m per hair length point
-  maxReach: 45, // m
+  ropePoints: 400, // path points the drawn strand can hold; a longer cable is drawn with every few stored points
+  hairReachScale: 0.325, // m per sqrt(hair) once that beats the length+trail reach (3.4M hair = 600 m)
+  maxReach: 2000, // m (the sqrt curve gets there at about 38M hair)
   segment: 0.5, // m between stored path points
   tipSpeed: 12, // m/s the steered tip flies at
   launchPitch: 0.3, // rad above the horizon the tip leaves at
-  steerSensitivity: 0.003, // rad of aim per pixel of drag
-  steerEase: 4, // 1/s the tip's heading glides onto the aim (lower = softer turns)
+  steerSensitivity: 0.003, // rad of aim per pixel of drag (times the portal's camera sensitivity)
+  keyTurnRate: 1.8, // rad/s A/D (or the arrows) turn the aim
+  keyPitchRate: 1.2, // rad/s W/S tilt the aim up/down
+  steerEase: 6, // 1/s the tip's heading glides onto the aim (lower = softer turns)
   maxTipPitch: 1.3, // rad up or down the tip can be aimed
   anchorOffset: 0.05, // m the anchored tip sits off the surface it hit
   flySway: 0.12, // m sideways the flying strand ripples, mid-length
   flySwayFreq: 9, // rad/s of that ripple
   camFollowLerp: 6, // 1/s the camera's focus eases onto the flying tip
   camReturnLerp: 4, // 1/s it eases back to the player once the tip anchors or runs out
-  camYawLerp: 5, // 1/s the orbit swings round behind the tip's heading
-  camDistance: 2.5, // m boom length while watching the flying tip
-  camPitch: 0.4, // rad the boom is lifted to at least, so it looks down on the strand, not along it
+  camTurnLerp: 12, // 1/s the orbit swings onto the aim: fast, so the view turns with the steering and leads the tip
+  camDistance: 3, // m boom length while watching the flying tip
+  camLead: 1.5, // m ahead of the tip the camera looks, so the path ahead is in view
+  camPitch: 0.4, // rad the boom is lifted when aiming level, so it looks down on the strand, not along it
+  camPitchFollow: 0.6, // rad of boom tilt per rad of aim pitch: aiming up drops the boom, aiming down lifts it
+  camMinPitch: -0.5, // rad the boom may drop to while following an upward aim (below CAMERA.minPitch)
   retractSpeed: 80, // m/s it reels back in
   zipStartSpeed: 8, // m/s at the grab
   zipSpeed: 14, // m/s top speed along the cable
@@ -195,6 +206,37 @@ export const SETTINGS = {
   graphics_quality: { def: 'High', type: 'enum', values: ['Low', 'Medium', 'High', 'Ultra'] },
   camera_sensitivity: { def: '1', type: 'number', min: 0.1, max: 5 },
   fullscreen: { def: 'false', type: 'bool' },
+  sfx_volume: { def: '1', type: 'number', min: 0, max: 1 }, // master volume for every sound effect
+}
+
+// Hair cable foley (cableSfx.js): synthesised live from shaped noise, so there are no files and no tones.
+// Levels are 0..1-ish mix gains, all scaled by the sfx_volume setting.
+export const CABLE_SFX = {
+  volume: 0.65, // master for every cable sound
+  flight: 1.4, // the strand streaming through the air while the tip flies
+  flightFreq: 750, // Hz centre of that whoosh (it brightens a little as the tip turns)
+  flutterRate: 22, // 1/s the strands flap at in the airflow
+  rustleRate: 420, // fibre ticks per second in the hair rustle
+  wind: 1.3, // the wind past the ears at full ride speed
+  friction: 0.55, // the hands sliding along the hair while riding
+  attack: 0.07, // s time constant the loops swell in with
+  release: 0.22, // s time constant they die away with
+  reverbTime: 0.55, // s of the short open-air tail the one-shots ring into
+  reverbLevel: 0.35, // gain of that tail
+  toneCut: 2500, // Hz above which the whole cable mix is shelved down: soft, not hissy
+  toneCutGain: -7, // dB of that shelf
+  toneLowpass: 6000, // Hz, nothing harsh gets past this
+  sleepAfter: 3, // s of silence before the audio context is suspended (battery)
+}
+
+// Sound effects (public/audio/): file and base volume (0..1, scaled by the sfx_volume setting).
+export const SFX = {
+  click: { file: 'button-click.mp3', volume: 0.4 }, // any HUD / salon button press
+  hover: { file: 'button-hover.mp3', volume: 0.5 }, // pointer moves onto a button (mouse only)
+  hairGain: { file: 'power_gain.mp3', volume: 0.3 }, // every treadmill step; quiet, it repeats
+  cash: { file: 'cash.mp3', volume: 0.5 }, // spending hair or Wins
+  levelUp: { file: 'level_up.mp3', volume: 0.4 }, // level up and rebirth
+  winClaim: { file: 'win-claim.mp3', volume: 0.35 }, // zone wins, chests, quests, free gift
 }
 
 // The base rig, measured from player.glb: origin at the feet, 6.4 units tall at bind pose.
@@ -299,4 +341,21 @@ export function coerceSetting(key, raw) {
   if (spec.type === 'enum') return spec.values.includes(value) ? value : spec.def
   const n = Number(value)
   return clamp(Number.isFinite(n) ? n : Number(spec.def), spec.min, spec.max)
+}
+
+// --- Multiplayer (net.js, remotePlayers.js; server: Hair-escape-backend) -----------------------------------
+// A configured websocket URL wins (dev defaults to a local server); empty = net.js asks the Bloxity SDK for
+// the channel's endpoint, and with neither the game simply runs offline.
+const SERVER_URL_DEV = import.meta.env.VITE_SERVER_URL_DEV || (import.meta.env.DEV ? 'ws://localhost:2567' : '')
+const SERVER_URL_MAIN = import.meta.env.VITE_SERVER_URL_MAIN || ''
+export const SERVER_URL = import.meta.env.MODE === 'production' ? SERVER_URL_MAIN : SERVER_URL_DEV
+export const NET = {
+  poseHz: 12, // Hz the pose is sent at
+  saveDebounce: 3, // s after the last change before a save goes out
+  saveMaxWait: 15, // s a steady stream of changes may delay a save
+  retryDelay: 10, // s between reconnect attempts
+  remoteLerp: 12, // 1/s: how fast remote players ease toward their last relayed pose
+  maxRemotes: 24, // other players drawn at once (nearest first)
+  remoteFade: 90, // m: farther players are hidden
+  nameHeight: 2.9, // m above a remote player's feet the name tag floats
 }

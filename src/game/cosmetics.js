@@ -6,6 +6,7 @@
 //
 // Unlock fields (state.js `cosmeticReq`). Thresholds, met first and never spent:
 //   rebirths   rebirths done             days   distinct days played
+//   prestige   prestiges done (the Prestige prizes)
 //   owns       a HAIR_STYLES key (the LIMITED bundles)
 // then `price`: Wins, spent once to own it (buyable as soon as the player has that many).
 // None of these: free.
@@ -56,8 +57,9 @@ export const DEFAULT_CUT = 'classic'
 // Charms: one per slot along the hair. `mult` adds to hair per step: the worn
 // charms give 1 + the sum of (mult - 1), so x2 + x2 + x1.25 is x4.25.
 // `model` / `colors` pick the 3D piece (avatar/adornments.js) and the card art.
-export const CHARM_SLOTS = ['top', 'middle', 'tip']
-export const SLOT_NAMES = { top: 'Top', middle: 'Middle', tip: 'Tip' }
+// The 'bonus' slot is the Prestige 1 prize: it opens with the first prestige and takes the prestige charms.
+export const CHARM_SLOTS = ['top', 'middle', 'tip', 'bonus']
+export const SLOT_NAMES = { top: 'Top', middle: 'Middle', tip: 'Tip', bonus: 'Bonus' }
 export const CHARMS = {
   bowClip: { name: 'Bow Clip', slot: 'top', mult: 1.1, rarity: 'common', price: 2, model: 'bow', colors: ['#ff5fb4', '#ff9ad3'] },
   heartClip: { name: 'Heart Clip', slot: 'top', mult: 1.25, rarity: 'uncommon', price: 5, model: 'heart', colors: ['#ff3d6a', '#ff8aa8'] },
@@ -74,6 +76,8 @@ export const CHARMS = {
   bell: { name: 'Golden Bell', slot: 'tip', mult: 1.5, rarity: 'rare', price: 15, model: 'bell', colors: ['#ffc21a', '#7a4a00'] },
   lantern: { name: 'Lantern', slot: 'tip', mult: 2, rarity: 'epic', price: 50, model: 'lantern', colors: ['#fff27a', '#d98a00'] },
   gemDrop: { name: 'Gem Drop', slot: 'tip', mult: 3, rarity: 'legendary', price: 220, model: 'gem', colors: ['#ff2f6a', '#ff9ac0'] },
+  prestigeStar: { name: 'Prestige Star', slot: 'bonus', mult: 2, rarity: 'mythic', prestige: 1, model: 'star', colors: ['#ffd21a', '#ff5fc8'] },
+  prestigeCrown: { name: 'Prestige Crown', slot: 'bonus', mult: 3, rarity: 'mythic', prestige: 2, model: 'crown', colors: ['#ff8ad8', '#ffd21a'] },
 }
 
 // Auras: spinning beaded rings that float along the hair. Cosmetic only.

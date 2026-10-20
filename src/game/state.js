@@ -1,5 +1,5 @@
-// Player progression: hair (the currency), level/XP, wins, rebirths, the
-// equipped hair style and the tutorial quest chain. One mutable singleton;
+// Player progression: hair (the currency), level/XP, wins, rebirths, prestige,
+// the rebirth upgrades, the equipped hair style and the tutorial quest chain. One mutable singleton;
 // anything that changes it calls `changed()` so the HUD, leaderboards and the
 // avatar's hair follow. Saved to localStorage (per browser, best effort).
 import { HAIR, DEV_MODE, clamp } from '../config.js'
@@ -7,7 +7,7 @@ import { AURAS, CHARM_SLOTS, CHARMS, CUTS, DEFAULT_AURA, DEFAULT_CUT, DEFAULT_TR
 
 // Hair styles in the HAIR SHOP (west bleachers), also the salon's Colors tab. `bonus` is hair per
 // treadmill step. `price` is Wins, spent once to own it (shown as buyable once the player has that
-// many); no price = free. `rebirths` is a threshold that must be met first (not spent), and
+// many); no price = free. `rebirths` / `prestige` are thresholds that must be met first (not spent), and
 // `limitedUntil` the date a limited drop stops being sold.
 // `kind` / `extra` pick the display model (hairShop.js).
 export const LIMITED_END = Date.parse('2026-10-24T00:00:00Z') // the "5 DAYS" Twin Braids drop
@@ -34,13 +34,48 @@ export const HAIR_STYLES = {
   pony: { name: 'Princess Pony', bonus: 30, price: 100, color: '#ff8ad8', tip: '#ffd6f4', label: ['#ffd0f0', '#ff4cc0'], extra: 'bow' },
   pigtails: { name: 'Curly Pigtails', bonus: 40, price: 150, color: '#ffd23a', tip: '#ff9a1a', label: ['#fff27a', '#ffb000'], kind: 'braids' },
   dragon: { name: 'Dragon Lord', bonus: 150, price: DRAGON_BUNDLE.price, color: '#ff3b2f', tip: '#ffb000', label: ['#ffd37a', '#ff3b2f'], extra: 'horns' },
+  // Prestige prizes (PRESTIGE_PRIZES): unlocked by the prestige count, so a prestige never takes them back.
+  prestigeGold: { name: 'Prestige Gold Hair', bonus: 60, prestige: 1, color: '#ffc21a', tip: '#ff5fc8', label: ['#fff27a', '#ff5fc8'], extra: 'sparkle' },
+  prestigeDiamond: { name: 'Prestige Diamond Hair', bonus: 120, prestige: 2, color: '#bff4ff', tip: '#ff8ad8', label: ['#ffffff', '#7fe8ff'], extra: 'crystal' },
 }
 
 export const REBIRTH_LEVEL = 5 // level needed for the first rebirth
 export const REBIRTH_LEVEL_STEP = 3 // levels the goal rises with every rebirth
-export const SKIP_REBIRTH = { price: 59 } // premium skip (display only, no payment flow yet)
+// Shop offers, bought with Wins (spent). Level packs and the skip can be bought repeatedly; the starter pack and x2 Hair once.
+export const LEVEL_PACKS = [
+  { levels: 24, hair: 25000, price: 8, color: 'orange' },
+  { levels: 35, hair: 100000, price: 20, color: 'blue' },
+  { levels: 48, hair: 500000, price: 45, color: 'red' },
+  { levels: 75, hair: 12900000, price: 120, color: 'purple' },
+]
+export const STARTER_PACK = { hair: 25000, wins: 50, price: 10 } // pays back more Wins than it costs, so it is one-time
+export const X2_HAIR = { price: 25, mult: 2 } // permanent hair-per-step multiplier
 export const REBIRTH_BONUS = 0.5 // +50% hair per rebirth
 export const EVENT_BOOST = { mult: 2, seconds: 300 }
+
+// Prestige (the Rebirth window's Prestige tab): needs PRESTIGE_REBIRTHS rebirths, PRESTIGE_STEP more each
+// time, and multiplies hair and Wins by 1 + prestiges for good. It resets hair, Wins, rebirths, upgrades,
+// treadmills, hair colours (skins) and trails; charms, cuts, auras and the day streak stay.
+export const PRESTIGE_REBIRTHS = 10
+export const PRESTIGE_STEP = 5
+// What reaching each prestige unlocks (the items carry `prestige: n`). Index 0 is Prestige 1.
+export const PRESTIGE_PRIZES = [
+  [{ kind: 'skin', id: 'prestigeGold' }, { kind: 'charm', id: 'prestigeStar' }, { kind: 'slot' }],
+  [{ kind: 'skin', id: 'prestigeDiamond' }, { kind: 'charm', id: 'prestigeCrown' }],
+]
+
+// Upgrades (the Upgrades tab): each level opens at a rebirth count (`UPGRADE_REBIRTHS[level]`, a threshold,
+// not spent) and is claimed with its button; a prestige takes them back to 0. `per` is the gain per level:
+// a fraction (hair, wins, ride, luck), hours (offline) or m/s (walk).
+export const UPGRADE_REBIRTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+export const UPGRADES = {
+  hair: { name: 'Hair Power', per: 0.25, max: 10, unit: '%', what: 'Hair', color: 'blue' },
+  wins: { name: 'Win Magnet', per: 0.25, max: 10, unit: '%', what: 'Wins', color: 'gold' },
+  sleepy: { name: 'Sleepy Hair', per: 1, max: 8, unit: 'h', what: 'Offline', color: 'purple' },
+  zippy: { name: 'Zippy Hair', per: 0.05, max: 10, unit: '%', what: 'Ride Speed', color: 'orange' },
+  lucky: { name: 'Lucky Locks', per: 0.1, max: 10, unit: '%', what: 'Luck', color: 'green' },
+  feet: { name: 'Quick Feet', per: 1.5, max: 8, unit: '', what: 'Walk Speed', color: 'pink' },
+}
 
 // XP to go from `level` to level + 1. Level 1 needs 12 (the reference HUD's "3/12").
 export const levelRequirement = (level) => Math.round(12 * Math.pow(1.6, level - 1))
@@ -58,8 +93,10 @@ const fresh = () => ({
   xp: 3,
   wins: 0,
   rebirths: 0,
+  prestige: 0, // prestiges done
+  upgrades: {}, // upgrade id -> level claimed (UPGRADES)
   equipped: 'golden',
-  owned: [], // hair styles bought or claimed, and bought treadmills ('tm:<key>')
+  owned: [], // hair styles bought or claimed (treadmills unlock with rebirths and are not owned)
   spinAt: 0, // ms timestamp of the last Lucky Spin
   chests: {}, // chest id -> last opened (ms), or for the rebirth chest the number claimed
   lastSeen: 0, // ms timestamp of the last save (offline earnings)
@@ -67,10 +104,10 @@ const fresh = () => ({
   bestHair: 3,
   giftAt: 0, // ms timestamp the daily gift was last claimed
   boostUntil: 0, // ms timestamp the event boost runs out
-  flags: { treadmill: false, portal: false },
+  flags: { treadmill: false, portal: false, starter: false, x2: false },
   // Hair Salon (cosmetics.js). Bought / earned salon items go in `owned` as 'cut:<id>', 'charm:<id>', 'aura:<id>', 'trail:<id>'.
   cut: DEFAULT_CUT,
-  charms: { top: null, middle: null, tip: null }, // slot -> charm id
+  charms: { top: null, middle: null, tip: null, bonus: null }, // slot -> charm id
   aura: DEFAULT_AURA,
   trail: DEFAULT_TRAIL,
   lengthPick: 1, // Length slider: the shown fraction of the grown hair (1 = longest)
@@ -114,7 +151,8 @@ export const boostActive = () => Date.now() < state.boostUntil
 export function hairPerStep(mult) {
   const style = HAIR_STYLES[state.equipped] ?? HAIR_STYLES.golden
   const boost = boostActive() ? EVENT_BOOST.mult : 1
-  return Math.max(1, Math.round(style.bonus * mult * hairMultiplier() * boost * charmMultiplier() * trailMultiplier()))
+  const x2 = state.flags.x2 ? X2_HAIR.mult : 1
+  return Math.max(1, Math.round(style.bonus * mult * hairMultiplier() * boost * x2 * charmMultiplier() * trailMultiplier() * (1 + upgradeValue('hair')) * prestigeMultiplier()))
 }
 
 export function addHair(n) {
@@ -143,18 +181,55 @@ export function setFlag(name) {
   changed()
 }
 
-export function addWin(amount = 1) {
+// Every Win award goes through the Win Magnet upgrade and the prestige multiplier.
+export const winMultiplier = () => (1 + upgradeValue('wins')) * prestigeMultiplier()
+export function addWin(base = 1) {
+  const amount = Math.max(1, Math.round(base * winMultiplier()))
   state.wins += amount
   emit({ type: 'win', wins: state.wins, amount })
   changed()
 }
 
-export const limitedLeft = (id) => Math.max(0, (HAIR_STYLES[id]?.limitedUntil ?? 0) - Date.now())
+// Shop purchases. Each spends Wins and returns false when short (or already owned, for the one-time offers).
+function spendWins(price) {
+  if (state.wins < price) return false
+  state.wins -= price
+  return true
+}
+
+export function buyLevelPack(index) {
+  const p = LEVEL_PACKS[index]
+  if (!p || !spendWins(p.price)) return false
+  state.hair += p.hair
+  state.level += p.levels
+  state.xp = 0
+  emit({ type: 'level', level: state.level })
+  changed()
+  return true
+}
+
+export function buyStarterPack() {
+  if (state.flags.starter || !spendWins(STARTER_PACK.price)) return false
+  state.flags.starter = true
+  state.wins += STARTER_PACK.wins
+  addHair(STARTER_PACK.hair)
+  return true
+}
+
+export function buyX2Hair() {
+  if (state.flags.x2 || !spendWins(X2_HAIR.price)) return false
+  state.flags.x2 = true
+  changed()
+  return true
+}
+
+export const limitedLeft =(id) => Math.max(0, (HAIR_STYLES[id]?.limitedUntil ?? 0) - Date.now())
 
 // What still stands between the player and an item that is not theirs yet, or null when it is free.
 // Thresholds come first (not spent), then the Wins price (spent):
-// { type: 'rebirths' | 'days' | 'owns' | 'expired' | 'price', value }
+// { type: 'prestige' | 'rebirths' | 'days' | 'owns' | 'expired' | 'price', value }
 function unlockReq(it) {
+  if (it.prestige && state.prestige < it.prestige) return { type: 'prestige', value: it.prestige }
   if (it.rebirths && state.rebirths < it.rebirths) return { type: 'rebirths', value: it.rebirths }
   if (it.days && state.days < it.days) return { type: 'days', value: it.days }
   if (it.owns && !state.owned.includes(it.owns)) return { type: 'owns', value: it.owns }
@@ -190,6 +265,7 @@ export const canAcquire = (id) => affordable(styleReq(id))
 export function requirementText(id) {
   const r = styleReq(id)
   if (!r) return 'Unlocked'
+  if (r.type === 'prestige') return `Prestige ${r.value} Required`
   if (r.type === 'rebirths') return `${r.value} Rebirth${r.value === 1 ? '' : 's'} Required`
   if (r.type === 'expired') return 'Expired'
   return `🏆 ${r.value} Win${r.value === 1 ? '' : 's'}`
@@ -197,11 +273,10 @@ export function requirementText(id) {
 
 export function equip(id) {
   if (state.equipped === id) return false
-  if (!canEquip(id)) {
-    if (!canAcquire(id) || !buyWithWins(id, HAIR_STYLES[id].price)) return false
-  }
+  const bought = !canEquip(id)
+  if (bought && (!canAcquire(id) || !buyWithWins(id, HAIR_STYLES[id].price))) return false
   state.equipped = id
-  emit({ type: 'equip', id })
+  emit({ type: 'equip', id, bought })
   changed()
   return true
 }
@@ -230,7 +305,7 @@ export function wearCosmetic(kind, id) {
   if (req && (!affordable(req) || !buyWithWins(`${kind}:${id}`, req.value))) return false
   if (kind === 'charm') state.charms = { ...state.charms, [it.slot]: id }
   else state[kind] = id
-  emit({ type: 'wear', kind, id })
+  emit({ type: 'wear', kind, id, bought: !!req })
   changed()
   return true
 }
@@ -257,8 +332,11 @@ export function wearBestCharms() {
   return true
 }
 
+// The charm slots open to the player: the bonus slot comes with the first prestige.
+export const charmSlots = () => CHARM_SLOTS.filter((slot) => slot !== 'bonus' || state.prestige >= 1)
+
 // Charms add up (1 + the sum of each one's extra), the trail multiplies.
-export const charmMultiplier = () => 1 + CHARM_SLOTS.reduce((sum, slot) => sum + Math.max(0, (CHARMS[state.charms[slot]]?.mult ?? 1) - 1), 0)
+export const charmMultiplier = () => 1 + charmSlots().reduce((sum, slot) => sum + Math.max(0, (CHARMS[state.charms[slot]]?.mult ?? 1) - 1), 0)
 export const trailMultiplier = () => TRAILS[state.trail]?.mult ?? 1
 
 // Length slider: x (0..1 along the bar) <-> the hair count whose look it shows, log-interpolated between anchors.
@@ -308,7 +386,54 @@ export function rebirth() {
   return true
 }
 
-// Buy a one-off unlock (a treadmill) with hair. Returns false when short.
+// --- Upgrades ---------------------------------------------------------------
+export const upgradeLevel = (id) => state.upgrades[id] ?? 0
+// The upgrade's current effect (see UPGRADES `per`).
+export const upgradeValue = (id) => upgradeLevel(id) * UPGRADES[id].per
+// Rebirths needed for the next level, or null at max.
+export const upgradeNeed = (id) => (upgradeLevel(id) < UPGRADES[id].max ? UPGRADE_REBIRTHS[upgradeLevel(id)] : null)
+export const canUpgrade = (id) => upgradeNeed(id) != null && state.rebirths >= upgradeNeed(id)
+export const anyUpgradeReady = () => Object.keys(UPGRADES).some(canUpgrade)
+export function upgrade(id) {
+  if (!UPGRADES[id] || !canUpgrade(id)) return false
+  state.upgrades = { ...state.upgrades, [id]: upgradeLevel(id) + 1 }
+  emit({ type: 'upgrade', id, level: state.upgrades[id] })
+  changed()
+  return true
+}
+export const walkBonus = () => upgradeValue('feet') // m/s on top of PHYSICS.moveSpeed
+export const rideMultiplier = () => 1 + upgradeValue('zippy') // times the cable's zip speed
+export const luck = () => upgradeValue('lucky') // chance of a second, better Lucky Spin roll
+
+// --- Prestige ---------------------------------------------------------------
+export const prestigeRebirths = (p = state.prestige) => PRESTIGE_REBIRTHS + p * PRESTIGE_STEP
+export const prestigeMultiplier = (p = state.prestige) => 1 + p
+export const canPrestige = () => state.rebirths >= prestigeRebirths()
+// The prizes for reaching prestige `p` (1-based), [] past the list.
+export const prestigePrizes = (p = state.prestige + 1) => PRESTIGE_PRIZES[p - 1] ?? []
+
+export function prestige() {
+  if (!canPrestige()) return false
+  // Charms, cuts and auras are kept: record the ones unlocked by a threshold so they stay unlocked.
+  const keep = ['cut', 'charm', 'aura'].flatMap((kind) => Object.keys(SALON_KINDS[kind]).filter((id) => cosmeticUnlocked(kind, id)).map((id) => `${kind}:${id}`))
+  state.owned = [...new Set([...state.owned, ...keep])].filter((k) => !k.startsWith('tm:') && !k.startsWith('trail:') && !HAIR_STYLES[k])
+  state.prestige++
+  state.hair = 3
+  state.level = 1
+  state.xp = 3
+  state.wins = 0
+  state.rebirths = 0
+  state.upgrades = {}
+  state.chests = { ...state.chests, rebirth: 0 }
+  state.equipped = 'golden'
+  state.trail = DEFAULT_TRAIL
+  emit({ type: 'prestige', prestige: state.prestige })
+  changed()
+  return true
+}
+
+// Buy a one-off unlock with hair. Returns false when short. (Nothing in the
+// Hub sells for hair right now: treadmills unlock with rebirths.)
 export const owns = (key) => state.owned.includes(key)
 export function buy(key, cost) {
   if (owns(key) || state.hair < cost) return false
@@ -360,14 +485,20 @@ export const spinReady = () => Date.now() - state.spinAt >= SPIN_COOLDOWN
 export function spin() {
   if (!spinReady()) return -1
   state.spinAt = Date.now()
-  const index = Math.floor(Math.random() * SPIN_PRIZES.length)
+  const roll = () => Math.floor(Math.random() * SPIN_PRIZES.length)
+  let index = roll()
+  if (Math.random() < luck()) {
+    const again = roll()
+    if (SPIN_PRIZES[again] > SPIN_PRIZES[index]) index = again
+  }
   addHair(SPIN_PRIZES[index] * state.level)
   return index
 }
 
-// "YOU EARN HAIR OFFLINE!": one x1 treadmill step every 30 s away, up to 8 h.
+// "YOU EARN HAIR OFFLINE!": one x1 treadmill step every 30 s away, up to 8 h plus the Sleepy Hair hours.
 const OFFLINE_STEP = 30 * 1000
 const OFFLINE_CAP = 8 * 60 * 60 * 1000
+const offlineCap = () => OFFLINE_CAP + upgradeValue('sleepy') * 3600e3
 
 export const GIFT_COOLDOWN = 4 * 60 * 60 * 1000 // 4 h between free gifts
 export const giftReady = () => Date.now() - state.giftAt >= GIFT_COOLDOWN
@@ -413,7 +544,7 @@ function scheduleSave() {
   }, 1500)
 }
 
-// Dev-only starting stats from .env (VITE_DEV_HAIR, _LEVEL, _WINS, _REBIRTHS, _OWNED, _EQUIPPED), so you can test late-game without grinding.
+// Dev-only starting stats from .env (VITE_DEV_HAIR, _LEVEL, _WINS, _REBIRTHS, _PRESTIGE, _OWNED, _EQUIPPED), so you can test late-game without grinding.
 function applyDevStats() {
   const env = import.meta.env
   const num = (v) => (v != null && v !== '' && Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : null)
@@ -425,7 +556,9 @@ function applyDevStats() {
   if (level != null) (state.level = Math.max(1, level)), (state.xp = 0)
   if (wins != null) state.wins = wins
   if (rebirths != null) state.rebirths = rebirths
-  // Comma list of hair style keys, 'tm:<key>' treadmills and salon items ('cut:braid', 'charm:lantern', ...); 'all' owns every hair style and salon item.
+  const prestiges = num(env.VITE_DEV_PRESTIGE)
+  if (prestiges != null) state.prestige = prestiges
+  // Comma list of hair style keys and salon items ('cut:braid', 'charm:lantern', ...); 'all' owns every hair style and salon item.
   const owned = (env.VITE_DEV_OWNED ?? '').split(',').map((k) => k.trim()).filter(Boolean)
   const everything = () => [...Object.keys(HAIR_STYLES), ...Object.entries(SALON_KINDS).flatMap(([kind, list]) => Object.keys(list).map((id) => `${kind}:${id}`))]
   state.owned = [...new Set([...state.owned, ...owned.flatMap((k) => (k === 'all' ? everything() : [k]))])]
@@ -454,6 +587,22 @@ function sanitizeSalon() {
   state.owned = [...new Set([...state.owned, ...keep])]
 }
 
+// Merges a saved document over a fresh state and credits the hair earned while away.
+function applySaved(saved) {
+  Object.assign(state, fresh(), saved, { flags: { ...fresh().flags, ...saved.flags }, chests: { ...saved.chests }, upgrades: { ...saved.upgrades }, charms: { ...fresh().charms, ...saved.charms } })
+  sanitizeSalon()
+  if (!HAIR_STYLES[state.equipped]) state.equipped = 'golden'
+  const away = Math.min(offlineCap(), Date.now() - (state.lastSeen || Date.now()))
+  const steps = Math.floor(away / OFFLINE_STEP)
+  if (steps > 0) {
+    const n = steps * hairPerStep(1)
+    state.hair += n
+    state.xp += n
+    while (state.xp >= levelRequirement(state.level)) state.xp -= levelRequirement(state.level++)
+    offlineEarned += n
+  }
+}
+
 export function load() {
   if (NO_PERSIST) {
     applyDevStats()
@@ -463,24 +612,24 @@ export function load() {
   }
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) {
-      const saved = JSON.parse(raw)
-      Object.assign(state, fresh(), saved, { flags: { ...fresh().flags, ...saved.flags }, chests: { ...saved.chests }, charms: { ...fresh().charms, ...saved.charms } })
-      sanitizeSalon()
-      if (!HAIR_STYLES[state.equipped]) state.equipped = 'golden'
-      const away = Math.min(OFFLINE_CAP, Date.now() - (state.lastSeen || Date.now()))
-      const steps = Math.floor(away / OFFLINE_STEP)
-      if (steps > 0) {
-        const n = steps * hairPerStep(1)
-        state.hair += n
-        state.xp += n
-        while (state.xp >= levelRequirement(state.level)) state.xp -= levelRequirement(state.level++)
-        offlineEarned = n
-      }
-    }
+    if (raw) applySaved(JSON.parse(raw))
   } catch {
     // Corrupt or blocked: start fresh.
   }
   countDay()
   changed()
+}
+
+// The account's save from the server (net.js) replaces the local one. Returns the hair earned while away.
+export function hydrate(doc) {
+  if (NO_PERSIST && Object.keys(import.meta.env).some((k) => k.startsWith('VITE_DEV_') && k !== 'VITE_DEV_MODE' && import.meta.env[k] !== '')) return 0 // keep the .env dev stats instead of the server's save
+  const before = offlineEarned
+  try {
+    applySaved(doc)
+  } catch {
+    return 0
+  }
+  countDay()
+  changed()
+  return offlineEarned - before
 }

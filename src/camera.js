@@ -9,8 +9,9 @@ import { CAMERA, GRAPPLE, PHYSICS } from './config.js'
 // both derive from it, so they cannot disagree (separate rates read as jitter).
 // The wheel sets a zoom target that glides; speed pulls the boom back and widens
 // the FOV; solid props pull the boom in until clear. While the hair cable's tip
-// is flying, the look-at point eases onto the tip and the orbit swings round
-// behind its heading (setCameraFocus), then eases back to the player.
+// is flying, the look-at point eases onto (just ahead of) the tip and the orbit
+// turns quickly onto the cable's aim, yaw and pitch, so the view turns with the
+// steering and leads the tip (setCameraFocus); then it eases back to the player.
 const state = { yaw: 0, pitch: CAMERA.startPitch }
 const FLOOR_MARGIN = 0.3 // m the camera stays above the surface under it
 const TELEPORT_DISTANCE = 15 // a same-frame jump bigger than this is a respawn: snap
@@ -20,6 +21,7 @@ let sensitivity = 1
 export function setCameraSensitivity(value) {
   sensitivity = value
 }
+export const getCameraSensitivity = () => sensitivity
 
 // Camera shake amplitude (m) from other systems (the cable-ride speed rush).
 let shake = 0
@@ -42,7 +44,7 @@ let zoomTarget = CAMERA.distance // what the wheel asked for
 let zoomEased = CAMERA.distance
 let rush = 0 // eased 0..1 speed factor
 let clearance = 1 // 0..1 of the boom the walls allow, eased back out
-const focus = { on: false, x: 0, y: 0, z: 0, yaw: 0 } // a point to watch instead of the player
+const focus = { on: false, x: 0, y: 0, z: 0, yaw: 0, pitch: 0 } // a point to watch instead of the player
 let focusMix = 0 // eased 0..1 from the player to the focus point
 
 export function getYaw() {
@@ -56,13 +58,15 @@ export function syncYawToPlayer() {
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v)
 
-// Watch a world point (the flying hair tip) heading along `yaw` (rad, facing convention).
-export function setCameraFocus(x, y, z, yaw) {
+// Watch a world point (just ahead of the flying hair tip), the orbit turned onto
+// the aim `yaw` (rad, facing convention) and `pitch` (rad above the horizon).
+export function setCameraFocus(x, y, z, yaw, pitch) {
   focus.on = true
   focus.x = x
   focus.y = y
   focus.z = z
   focus.yaw = yaw
+  focus.pitch = pitch
 }
 
 export function clearCameraFocus() {
@@ -71,10 +75,11 @@ export function clearCameraFocus() {
 
 export function update(camera, dt) {
   state.yaw -= inputState.look.dx * CAMERA.lookSensitivity * sensitivity
-  state.pitch += inputState.look.dy * CAMERA.lookSensitivity * sensitivity
+  // The input never pushes below minPitch, but a lower boom left by a cable flight is kept and eased back up (below).
+  state.pitch = clamp(state.pitch + inputState.look.dy * CAMERA.lookSensitivity * sensitivity, Math.min(CAMERA.minPitch, state.pitch), CAMERA.maxPitch)
   inputState.look.dx = 0
   inputState.look.dy = 0
-  state.pitch = clamp(state.pitch, CAMERA.minPitch, CAMERA.maxPitch)
+  if (!focus.on && state.pitch < CAMERA.minPitch) state.pitch += (CAMERA.minPitch - state.pitch) * (1 - Math.exp(-GRAPPLE.camReturnLerp * dt))
 
   zoomTarget = clamp(zoomTarget + inputState.zoom * CAMERA.zoomStep, CAMERA.minDistance, CAMERA.maxDistance)
   inputState.zoom = 0
@@ -121,7 +126,7 @@ export function update(camera, dt) {
   look.y = followed.y + player.dims.height * CAMERA.targetHeight
   look.z = followed.z
 
-  // Hair-tip follow: blend the look-at point onto the tip and swing behind its heading.
+  // Hair-tip follow: blend the look-at point onto the tip and turn the orbit onto the aim.
   const mixRate = focus.on ? GRAPPLE.camFollowLerp : GRAPPLE.camReturnLerp
   focusMix += ((focus.on ? 1 : 0) - focusMix) * (1 - Math.exp(-mixRate * dt))
   if (teleported) focusMix = 0
@@ -131,10 +136,12 @@ export function update(camera, dt) {
     look.z += (focus.z - look.z) * focusMix
   }
   if (focus.on) {
+    const turn = 1 - Math.exp(-GRAPPLE.camTurnLerp * dt)
     let d = focus.yaw + Math.PI - state.yaw
     d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2 // shortest way round
-    state.yaw += d * (1 - Math.exp(-GRAPPLE.camYawLerp * dt))
-    if (state.pitch < GRAPPLE.camPitch) state.pitch += (GRAPPLE.camPitch - state.pitch) * (1 - Math.exp(-GRAPPLE.camYawLerp * dt))
+    state.yaw += d * turn
+    const wantPitch = clamp(GRAPPLE.camPitch - focus.pitch * GRAPPLE.camPitchFollow, GRAPPLE.camMinPitch, CAMERA.maxPitch)
+    state.pitch += (wantPitch - state.pitch) * turn
   }
 
   const cp = Math.cos(state.pitch)

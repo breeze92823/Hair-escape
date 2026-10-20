@@ -137,7 +137,6 @@ export function install(canvas) {
       moveStick(e.clientX, e.clientY)
     } else {
       looks.set(e.pointerId, { x: e.clientX, y: e.clientY })
-      inputState.steer = true
       if (looks.size === 2) pinchDist = fingerGap()
     }
   })
@@ -164,7 +163,6 @@ export function install(canvas) {
     if (e.pointerType !== 'touch') return
     if (e.pointerId === stick.id) releaseStick()
     if (looks.delete(e.pointerId) && looks.size === 2) pinchDist = fingerGap()
-    if (looks.size === 0) inputState.steer = false
   }
   canvas.addEventListener('pointerup', end)
   canvas.addEventListener('pointercancel', end)

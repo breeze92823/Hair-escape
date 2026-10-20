@@ -1,5 +1,5 @@
-// What the salon puts on the hair besides its cut and colour: the three charms
-// (top / middle / tip, game/cosmetics.js CHARMS) and the aura (AURAS), beaded rings
+// What the salon puts on the hair besides its cut and colour: the charms
+// (top / middle / tip, plus the Prestige bonus slot, game/cosmetics.js CHARMS) and the aura (AURAS), beaded rings
 // that float and spin along the hair. Both ride the hair rope every frame through
 // its sample() (avatar/hair.js), so they follow it onto the floor, round corners and
 // out along the hair cable.
@@ -29,7 +29,8 @@ import {
 } from 'three'
 import { AURAS, CHARM_SLOTS, CHARMS } from '../game/cosmetics.js'
 
-const CHARM_AT = { top: 0.32, middle: 0.5, tip: -0.06 } // m from the root (top), fraction of the length (middle), m from the tip (negative)
+const CHARM_AT = { top: 0.32, middle: 0.5, bonus: 0.75, tip: -0.06 } // m from the root (top), fraction of the length (middle, bonus), m from the tip (negative)
+const FRACTION_SLOTS = new Set(['middle', 'bonus'])
 const CHARM_SPIN = 1.2 // rad/s the band charms turn round the hair
 const AURA = {
   spacing: 3.2, // m of hair per ring
@@ -299,7 +300,7 @@ export function createAdornments(parent) {
 
   return {
     root,
-    // The worn charms: { top, middle, tip } of CHARMS ids (or null).
+    // The worn charms: { top, middle, tip, bonus } of CHARMS ids (or null).
     setCharms(charms) {
       for (const slot of CHARM_SLOTS) {
         const next = charms[slot] ? charmFor(charms[slot]) : null
@@ -334,7 +335,7 @@ export function createAdornments(parent) {
       for (const slot of CHARM_SLOTS) {
         const g = worn[slot]
         if (!g) continue
-        const at = slot === 'middle' ? len * CHARM_AT.middle : CHARM_AT[slot] < 0 ? len + CHARM_AT[slot] : Math.min(CHARM_AT[slot], len * 0.3)
+        const at = FRACTION_SLOTS.has(slot) ? len * CHARM_AT[slot] : CHARM_AT[slot] < 0 ? len + CHARM_AT[slot] : Math.min(CHARM_AT[slot], len * 0.3)
         rope.sample(at, g.position, tan)
         if (slot === 'top') fwd.set(-Math.sin(facing), 0, -Math.cos(facing))
         else fwd.copy(UP)

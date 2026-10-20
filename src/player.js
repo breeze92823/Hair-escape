@@ -13,6 +13,7 @@ export const player = {
   zipping: false, // riding the hair cable: hairCable.js owns the velocity, no gravity
   facing: Math.PI, // yaw the character model faces, radians
   moveSpeed: PHYSICS.moveSpeed,
+  gravityScale: 1, // times PHYSICS.gravity (main.js lowers it in the Star Summit)
   dims: { ...PLAYER_DIMS },
 }
 
@@ -36,7 +37,7 @@ export const floorAt = (x, z, feetY) => (feetY === undefined ? GROUND_Y : floorU
 
 const TAU = Math.PI * 2
 // Turns angle `from` toward `to` by at most maxDelta, the short way round.
-function rotateTowards(from, to, maxDelta) {
+export function rotateTowards(from, to, maxDelta) {
   const diff = Math.atan2(Math.sin(to - from), Math.cos(to - from))
   if (Math.abs(diff) <= maxDelta) return to
   return (from + Math.sign(diff) * maxDelta) % TAU
@@ -86,7 +87,7 @@ export function step(dt) {
   player.grounded = false
 
   const p = player.position
-  if (!zipping) player.velocity.y += PHYSICS.gravity * dt
+  if (!zipping) player.velocity.y += PHYSICS.gravity * player.gravityScale * dt
   p.x += player.velocity.x * dt
   p.y += player.velocity.y * dt
   p.z += player.velocity.z * dt

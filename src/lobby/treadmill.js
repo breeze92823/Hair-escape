@@ -1,7 +1,7 @@
-// Treadmills: the hair-growing machines along the east wall. The belt runs
-// along X; the console stands at the wall (+X) end with its screen facing the
-// room, so the runner faces the wall and the belt drags them back toward -X.
-// Every `STEP_TIME` of running on an unlocked belt is one "step" of hair.
+// Treadmills: the hair-growing machines along the Hub's east wall, and the bonus
+// ones on the zones' goal platforms (same model, same behaviour). The runner
+// faces the console and the belt drags them back away from it. Every
+// `STEP_TIME` of running on an unlocked belt is one "step" of hair.
 //
 // Each tier has a theme (frame / trim / glow colours) and an optional `deco`:
 // crown, neon fins, angel wings, green spikes, a ringed planet, a black-hole vortex.
@@ -27,6 +27,14 @@ export const THEMES = {
   galaxy: { frame: '#4a3ad0', trim: '#1a1060', glow: '#c8a8ff', screen: '#0c0630' },
   cosmic: { frame: '#ff3fa8', trim: '#5a0a3a', glow: '#ffd21a', screen: '#1a0010' },
   rainbow: { frame: '#ffffff', trim: '#ff5fc0', glow: '#7dff5a', screen: '#1a0a2a' },
+  // The zones' goal-platform treadmills.
+  ice: { frame: '#7cc4f5', trim: '#2f6fd6', glow: '#bff4ff', screen: '#0b1b4a' },
+  palace: { frame: '#ff5fb8', trim: '#ffc21a', glow: '#ffe27a', screen: '#2a0b3a' },
+  citadel: { frame: '#22a3b4', trim: '#0e3349', glow: '#3ff0ff', screen: '#06202a' },
+  frost: { frame: '#eef6ff', trim: '#ffc21a', glow: '#5fd8ff', screen: '#0b1b4a' },
+  sky: { frame: '#ffffff', trim: '#ffc21a', glow: '#7fd0ff', screen: '#0b2b5a' },
+  jungle: { frame: '#3f8f3a', trim: '#6b4226', glow: '#b6ff5a', screen: '#0a2a0a' },
+  forge: { frame: '#2a2228', trim: '#ff6a1a', glow: '#ffb347', screen: '#2a0a00' },
 }
 
 const box = (w, h, d, material) => {
@@ -181,14 +189,17 @@ function addDeco(g, deco, theme, { front, width, spin }) {
   }
 }
 
-// opts: { x, z, length, width, theme, deco, mult, labelY, consoleSide (+1 = console at +X) }
+// opts: { x, z, y (base height, m), length, width, theme, deco, mult, labels, labelY (above y),
+// consoleSide (+1 = console at +X, -1 = at -X) or yaw (rad; 0 = console at -X, -PI/2 = console at -Z) }
 export function buildTreadmill(parent, addCollider, opts) {
-  const { x, z, length = 6.5, width = 2.8, mult = 1, deco = null } = opts
-  const side = opts.consoleSide ?? -1
+  const { x, z, y = 0, length = 6.5, width = 2.8, mult = 1, deco = null } = opts
+  const yaw = opts.yaw ?? ((opts.consoleSide ?? -1) === 1 ? Math.PI : 0) // the model is built with its console at local -X
+  const cx = -Math.cos(yaw) // world direction from the belt's centre to the console
+  const cz = Math.sin(yaw)
   const theme = THEMES[opts.theme] ?? THEMES.dark
   const g = new Group()
-  g.position.set(x, 0, z)
-  if (side === 1) g.rotation.y = Math.PI // the model is built with its console at local -X
+  g.position.set(x, y, z)
+  g.rotation.y = yaw
   parent.add(g)
 
   const frameMat = new MeshStandardMaterial({ color: theme.frame, roughness: 0.45, metalness: 0.15 })
@@ -247,21 +258,25 @@ export function buildTreadmill(parent, addCollider, opts) {
   addDeco(g, deco, theme, { front, width, spin })
 
   // The console end blocks running off the front; the deck is walkable floor.
-  addCollider(x + side * (length / 2 + 0.25), z, 0.7, width + 0.3, 2.6)
-  addCollider(x, z, length + 0.5, width + 0.3, BELT_TOP)
+  const ends = length / 2 + 0.25
+  addCollider(x + cx * ends, z + cz * ends, 0.7, width + 0.3, y + 2.6, yaw, y)
+  addCollider(x, z, length + 0.5, width + 0.3, y + BELT_TOP, yaw, y)
 
   // Floats over the console half of the belt, in front of the wall decor.
-  const signs = label(parent, opts.labels ?? [], [x + side * (length / 2 - 2.2), opts.labelY ?? 4.4, z], { unit: 1.35 })
+  const over = length / 2 - 2.2
+  const signs = label(parent, opts.labels ?? [], [x + cx * over, y + (opts.labelY ?? 4.4), z + cz * over], { unit: 1.35 })
 
   const t = {
     mult,
     locked: false,
     steps: 0,
     signs,
-    center: { x, y: 1, z },
-    beltPush: { x: -side * BELT_SPEED, z: 0 },
+    center: { x, y: y + 1, z },
+    beltPush: { x: -cx * BELT_SPEED, z: -cz * BELT_SPEED },
     contains(p) {
-      return Math.abs(p.x - x) < length / 2 && Math.abs(p.z - z) < width / 2 - 0.25 && p.y < BELT_TOP + 0.15
+      const dx = p.x - x
+      const dz = p.z - z
+      return Math.abs(dx * cx + dz * cz) < length / 2 && Math.abs(dx * cz - dz * cx) < width / 2 - 0.25 && p.y > y - 0.2 && p.y < y + BELT_TOP + 0.15
     },
     repaint() {
       paintScreen(screenCanvas.getContext('2d'), 256, 128, theme, mult, t.locked, t.steps)

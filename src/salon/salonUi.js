@@ -9,9 +9,9 @@
 // bar over the tabs. `free` is the screen rect left for the 3D view; the salon camera
 // centres and fits the player in it (salon.js).
 import * as game from '../game/state.js'
-import { AURAS, CHARM_SLOTS, CHARMS, CUTS, LENGTH_MARKS, RARITY, SLOT_NAMES, TRAILS, rarityForBonus } from '../game/cosmetics.js'
+import { AURAS, CHARMS, CUTS, LENGTH_MARKS, RARITY, SLOT_NAMES, TRAILS, rarityForBonus } from '../game/cosmetics.js'
 import { HAIR, PLAYER_DIMS, RIG_HEIGHT } from '../config.js'
-import { BIG_X_ICON, HAIR_ICON, HAIRSTYLE_ICON, PADLOCK_ICON, REBIRTH_ICON, TROPHY_ICON, formatNumber } from '../hud.js'
+import { BIG_X_ICON, HAIR_ICON, HAIRSTYLE_ICON, PADLOCK_ICON, PRESTIGE_ICON, REBIRTH_ICON, TROPHY_ICON, formatNumber } from '../hud.js'
 import {
   ARROW_LEFT, ARROW_RIGHT, BOOK_ICON, CHECK_ICON, FLAME_ICON, HEART_ICON, MINUS_ICON, PLUS_ICON, STAR_TAG_ICON, TAB_ICONS,
   auraIcon, charmIcon, colorIcon, cutIcon, trailIcon,
@@ -142,7 +142,7 @@ const CSS = `
 #salon .sl-act.gold { --c: #ffc928; --li: #ffe27a; --d: rgba(170,100,0,0.18); --g: rgba(255,240,170,0.5); }
 #salon .sl-act.dim { filter: saturate(0.4) brightness(0.85); }
 
-#salon .sl-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.15fr); gap: ${u(10)}; margin-bottom: ${u(14)}; }
+#salon .sl-slots { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)) minmax(0, 1.15fr); gap: ${u(10)}; margin-bottom: ${u(14)}; }
 #salon .sl-slot { position: relative; aspect-ratio: 150 / 176; border-radius: ${u(14)}; border: ${u(5)} solid #24252e; background-color: #eef0f4; ${STUDS('rgba(60,66,84,0.10)', 'rgba(255,255,255,0.7)')} box-shadow: inset 0 0 0 ${u(4)} #fff; }
 #salon .sl-slot .ico { position: absolute; left: 16%; right: 16%; top: 8%; bottom: 32%; display: grid; place-items: center; }
 #salon .sl-slot .ico svg { width: 100%; height: 100%; filter: drop-shadow(0 ${u(3)} 0 rgba(0,0,0,0.3)); }
@@ -213,6 +213,7 @@ const fmtMult = (m) => `x${+m.toFixed(2)}`
 function reqBadge(req) {
   switch (req.type) {
     case 'price': return `<span class="req${game.affordable(req) ? ' buy' : ''} st">${TROPHY_ICON}${formatNumber(req.value)}</span>`
+    case 'prestige': return `<span class="req st">${PRESTIGE_ICON}P${req.value}</span>`
     case 'rebirths': return `<span class="req st">${REBIRTH_ICON}${req.value}</span>`
     case 'days': return `<span class="req st">${FLAME_ICON}Day ${req.value}</span>`
     case 'owns': return `<span class="req st">${STAR_TAG_ICON}LIMITED</span>`
@@ -253,6 +254,7 @@ function action(it) {
     case 'price': return game.affordable(r)
       ? { cls: 'gold', html: `Buy ${TROPHY_ICON}${formatNumber(r.value)}`, act: 'wear' }
       : { cls: 'grey s', html: `Need ${TROPHY_ICON}${formatNumber(r.value)}`, act: 'locked' }
+    case 'prestige': return { cls: 'grey s', html: `Need ${PRESTIGE_ICON}P${r.value}`, act: 'locked' }
     case 'rebirths': return { cls: 'grey s', html: `Need ${REBIRTH_ICON}${r.value}`, act: 'locked' }
     case 'days': return { cls: 'grey s', html: `${FLAME_ICON}Day ${Math.min(game.state.days, r.value)}/${r.value}`, act: 'locked' }
     case 'owns': return { cls: 'grey s', html: 'Limited!', act: 'locked' }
@@ -262,6 +264,7 @@ function action(it) {
 function lockedText(r) {
   switch (r.type) {
     case 'price': return `Need ${formatNumber(r.value)} Wins! (you have ${formatNumber(game.state.wins)})`
+    case 'prestige': return `Reach Prestige ${r.value}! (Rebirth window)`
     case 'rebirths': return `Need ${r.value} Rebirth${r.value === 1 ? '' : 's'}!`
     case 'days': return `Play on ${r.value} different days! (${game.state.days}/${r.value})`
     case 'owns': return `Comes with the ${game.HAIR_STYLES[r.value]?.name ?? 'limited'} bundle!`
@@ -380,12 +383,13 @@ export function createSalonUi({ onClose, onTab, onOrbit, onZoom, toast }) {
 
   const renderCharmSlots = () => {
     const s = game.state
-    const n = CHARM_SLOTS.filter((slot) => s.charms[slot]).length
-    extra.innerHTML = `<div class="sl-slots">${CHARM_SLOTS.map((slot) => {
+    const slots = game.charmSlots() // the bonus slot shows once the first prestige opens it
+    const n = slots.filter((slot) => s.charms[slot]).length
+    extra.innerHTML = `<div class="sl-slots" style="--n:${slots.length}">${slots.map((slot) => {
       const c = CHARMS[s.charms[slot]]
       return `<button class="sl-slot" data-slot="${slot}"><span class="ico${c ? '' : ' empty'}">${c ? charmIcon(c) : TAB_ICONS.charms()}</span><span class="lbl st">${SLOT_NAMES[slot]}</span></button>`
     }).join('')}
-      <div class="sl-sum"><span class="row st">${TAB_ICONS.charms()}${n}/3</span><span class="row mul st">${HAIR_ICON}${fmtMult(game.charmMultiplier())}</span><button class="sl-best st">Best!</button></div></div>`
+      <div class="sl-sum"><span class="row st">${TAB_ICONS.charms()}${n}/${slots.length}</span><span class="row mul st">${HAIR_ICON}${fmtMult(game.charmMultiplier())}</span><button class="sl-best st">Best!</button></div></div>`
   }
 
   // The Length tab's slider; built once per visit so a drag survives the state updates it causes.

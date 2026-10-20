@@ -11,7 +11,8 @@
 // into the long lava chamber behind: hop the small pillar to the big pink
 // landing, jump north through a gold +1 Win ring onto a pedestal, use its yellow
 // block to step up to a higher one, then cross to the final platform, whose
-// yellow pad awards the zone's wins and sends you home. Banded towers stand in
+// yellow pad awards the zone's wins; an opening in the back wall behind it leads
+// on into Zone 6. Banded towers stand in
 // the lava. Every jump is 4-6 m, inside the ~6.8 m running-jump reach. Falling into the lava
 // (or off the plateau) puts you back at the walkway's start. Procedural like
 // Zones 2-4 (voxel canvas textures, boxes; the battlements are instanced).
@@ -19,11 +20,11 @@
 // Measured against the 1.8 m player in the reference shots: the walkway is ~5
 // player heights wide, the lava ~2, the buildings ~10 tall with ~1.7-thick
 // walls, the pedestal ~4.4 across with a ~1.3-tall crystal and the octagon window ~3 tall.
-import { BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, RepeatWrapping, SRGBColorSpace, TorusGeometry } from 'three'
+import { BoxGeometry, ConeGeometry, CylinderGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, Object3D, PlaneGeometry, TorusGeometry } from 'three'
 import { kit, lavaTexture, voxelTexture } from './lavaPath.js'
 import { arrowTexture, decal, PALACE_Z, ZONE4_FINISH, ZONE4_PIT } from './zone4.js'
 import { label } from './lobby/labels.js'
-import { makeCanvas } from './lobby/paint.js'
+import { buildTreadmill } from './lobby/treadmill.js'
 
 export const ZONE5_NAME = 'PURPLE PALACE'
 export const ZONE5_BONUS = 1 // wins for jumping through the chamber's ring
@@ -56,9 +57,12 @@ const STEP_BLOCK = { x0: 10.2, x1: 11.6, z0: STEP1.z1 + 2.2, z1: STEP1.z1 + 0.8,
 const STEP2 = { x0: 11, x1: 16, z0: STEP_BLOCK.z1 - 3.9, z1: STEP_BLOCK.z1 - 8.9, top: STEP_BLOCK.top } // higher pedestal, level with the block
 const FINALE = { x0: STEP2.x1 + 4, x1: ROOM2.x1 - 1, z0: STEP2.z0 + 2.5, z1: STEP2.z0 - 17.5, top: STEP2.top } // the final platform, 4 m east
 const WIN_PAD = { x: FINALE.x1 - 4, z: FINALE.z0 - 6, size: 3.6 } // the zone's win pad (yellow); the blue pad is just north of it
+const TREAD = { len: 4.8, w: 2.4, mult: 1.4 } // the final platform's x1.4 Hair treadmill (m)
 const TOWERS = [[3, 7, STEP1.z1 - 3.5], [3, 7, STEP1.z1 - 12.5]] // banded towers in the lava (x0, x1, south z), 4 m deep
 const TOWER_TOP = FLOOR + 16
 const BACK_Z = ROOM2.z1 - WALL // the palace's north face
+// The opening in the back wall behind the final platform, where Zone 6's bridge carries on north.
+export const ZONE5_EXIT = { x0: FINALE.x0 + 1, x1: FINALE.x1 - 1, z0: FINALE.z1, z1: BACK_Z, top: FINALE.top }
 const LEFT_TOP = FLOOR + 10 // the west wall along the walkway
 const MERLON = { w: 1.6, h: 1.6, gap: 1.6 } // battlements along the front and sides of each building
 const EDGE = 0.8 // m of dark purple left showing at every inner corner of the magenta lining
@@ -290,7 +294,9 @@ function dais(k, d, { plate = false, plinth = false } = {}) {
 function buildInside(k) {
   // Walls around the courtyard and the next room: dark purple west, the tall tower east.
   k.voxSpan(WEST.x0, COURT.x0, COURT.z0, BACK_Z, { y0: LAVA_Y, y1: TOP, side: tex.purple, top: tex.purpleMid, cell: 2.5, cast: false })
-  k.voxSpan(COURT.x0, COURT.x1, ROOM2.z1, BACK_Z, { y0: LAVA_Y, y1: TOP, side: tex.purple, top: tex.purpleMid, cell: 2.5, cast: false })
+  for (const [x0, x1] of [[COURT.x0, ZONE5_EXIT.x0], [ZONE5_EXIT.x1, COURT.x1]]) { // the back wall, open behind the final platform
+    k.voxSpan(x0, x1, ROOM2.z1, BACK_Z, { y0: LAVA_Y, y1: TOP, side: tex.purple, top: tex.purpleMid, cell: 2.5, cast: false })
+  }
   k.voxSpan(COURT.x0 - 1.2, COURT.x0 + 0.3, COURT.z0, BACK_Z, { y0: TOP - 0.6, y1: TOP + 0.3, side: tex.pink, cell: 1, collide: false, cast: false })
   k.voxSpan(COURT.x0, COURT.x1, ROOM2.z1 + 0.3, BACK_Z, { y0: TOP - 0.6, y1: TOP + 0.3, side: tex.pink, cell: 1, collide: false, cast: false })
 
@@ -376,20 +382,6 @@ function buildChamber(k, hx0, hx1, wy) {
   return { ring, ...buildFinale(k) }
 }
 
-// Dark belt with pale stripes for the decorative treadmill.
-function stripeTexture() {
-  const c = makeCanvas(64, 16)
-  const ctx = c.getContext('2d')
-  ctx.fillStyle = '#1d2433'
-  ctx.fillRect(0, 0, 64, 16)
-  ctx.fillStyle = '#e8f2ff'
-  for (let x = 4; x < 64; x += 16) ctx.fillRect(x, 0, 6, 16)
-  const t = new CanvasTexture(c)
-  t.wrapS = t.wrapT = RepeatWrapping
-  t.colorSpace = SRGBColorSpace
-  return t
-}
-
 // --- The finale: pedestals stepping up, banded towers, the final platform ---------
 function buildFinale(k) {
   const r = ROOM2
@@ -425,7 +417,7 @@ function buildFinale(k) {
   crystal(k, r.x1 - 1.1, FLOOR + 12, FINALE.z0 - 4, 0.5, 2, '#ff2f8f', '#c0105a')
   crystal(k, r.x1 - 1.1, FLOOR + 12, FINALE.z0 - 6, 0.3, 1.1, '#efe8ff', '#b8a8e8')
 
-  // The final platform: win pad with a trophy, the blue +30 pad, a decorative x1.4 Hair treadmill, a crystal.
+  // The final platform: win pad with a trophy, the blue +30 pad, an x1.4 Hair treadmill, a crystal.
   const f = FINALE
   dais(k, f)
   const pad = (z, color, emissive) => {
@@ -447,21 +439,16 @@ function buildFinale(k) {
   trophy.position.set(WIN_PAD.x, f.top + 1.4, WIN_PAD.z)
   k.g.add(trophy)
 
-  const tx = f.x0 + 5.5
-  const tz = f.z1 + 5
-  const TREAD = { len: 3.6, w: 2 }
-  k.mesh(new BoxGeometry(TREAD.len + 0.4, 0.3, TREAD.w + 0.3), k.std('#7cc4f5', { roughness: 0.5 }), tx, f.top + 0.15, tz)
-  k.addCollider(tx, tz, TREAD.len + 0.4, TREAD.w + 0.3, f.top + 0.32)
-  const belt = stripeTexture()
-  belt.repeat.set(TREAD.len / 1.2, 1)
-  k.mesh(new BoxGeometry(TREAD.len, 0.06, TREAD.w - 0.4), new MeshStandardMaterial({ map: belt, roughness: 0.9 }), tx, f.top + 0.32, tz, { cast: false })
-  // Its console: a pink post under a chunky yellow cap.
-  const cx = tx - TREAD.len / 2 - 0.6
-  k.mesh(new BoxGeometry(0.5, 1.3, 0.8), k.std(COL.pinkHot), cx, f.top + 0.65, tz)
-  k.mesh(new BoxGeometry(1.2, 0.5, 1.6), k.std(COL.yellow, { emissive: '#d99a00', emissiveIntensity: 0.2 }), cx, f.top + 1.5, tz)
-  k.addCollider(cx, tz, 1.2, 1.6, f.top + 1.75)
+  // The x1.4 Hair treadmill: runs like the Hub's, console to the north (the back wall).
+  const treadmill = buildTreadmill(k.g, k.addCollider, {
+    x: f.x0 + 5.5, z: f.z1 + 5.6, y: f.top, yaw: -Math.PI / 2, length: TREAD.len, width: TREAD.w, theme: 'palace', mult: TREAD.mult, labelY: 3.9,
+    labels: [
+      { text: '[x2 Boost]', size: 0.35, fill: '#ff5a5a', stroke: '#3a0a0a' },
+      { text: `x${TREAD.mult} Hair`, size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' },
+    ],
+  })
   crystal(k, f.x0 + 2, f.top, f.z1 + 2, 0.7, 2.2, '#ff2f8f', '#c0105a')
-  return { trophy, belt, treadmill: { x: tx, z: tz } }
+  return { trophy, treadmill }
 }
 
 let yellowTex = null
@@ -475,13 +462,9 @@ export function buildZone5(scene, addCollider) {
 
   buildApproach(k)
   buildFront(k)
-  const { ring, trophy, belt, treadmill } = buildInside(k)
+  const { ring, trophy, treadmill } = buildInside(k)
   label(g, [{ text: `+${ZONE5_WIN} Wins`, size: 0.7, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [WIN_PAD.x, FINALE.top + 2.6, WIN_PAD.z], { unit: 1.4 })
   label(g, [{ text: '+30 Wins', size: 0.7, fill: ['#d6fbff', '#3fd8ff'], stroke: '#0a3a5a' }], [WIN_PAD.x, FINALE.top + 0.9, WIN_PAD.z - WIN_PAD.size - 1], { unit: 1.4 })
-  label(g, [
-    { text: '[x2 Boost]', size: 0.35, fill: '#ff5a5a', stroke: '#3a0a0a' },
-    { text: 'x1.4 Hair', size: 0.6, fill: ['#d6fbff', '#5fd8ff'], stroke: '#0a3a5a' },
-  ], [treadmill.x, FINALE.top + 2.6, treadmill.z], { unit: 1.2 })
   label(g, [{ text: `🏆 +${ZONE5_BONUS} Win`, size: 0.5, fill: ['#fff7a8', '#ffd21a'], stroke: '#5a3a00' }], [RING.x + RING.radius + 1, RING.y, RING.z], { unit: 1.2 })
 
   label(g, [
@@ -495,6 +478,7 @@ export function buildZone5(scene, addCollider) {
   let bonus = false
   let won = false
   return {
+    treadmills: [treadmill], // main.js runs them with the Hub's
     // From the finish platform's north edge to the back of the palace.
     contains: (p) => p.z < ZONE5_Z0 && p.z > BACK_Z && p.x > WEST.x0 && p.x < COURT.x1 + WALL,
     // Returns 'burned' (lava), 'fell' (off the open east side of the plateau), 'bonus' (through the ring) or 'finish' (the win pad).
@@ -502,7 +486,7 @@ export function buildZone5(scene, addCollider) {
       ring.position.y = RING.y + Math.sin(time * 2) * 0.15
       trophy.rotation.y = time * 1.5
       trophy.position.y = FINALE.top + 1.4 + Math.sin(time * 2) * 0.1
-      belt.offset.x = -time * 0.6
+      treadmill.update(dt, time)
       const onPad = Math.abs(p.x - WIN_PAD.x) < WIN_PAD.size / 2 && Math.abs(p.z - WIN_PAD.z) < WIN_PAD.size / 2
       if (!won && onPad && p.y >= FINALE.top - 0.05) {
         won = true

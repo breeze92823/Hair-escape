@@ -6,8 +6,8 @@ export const inputState = {
   look: { dx: 0, dy: 0 }, // raw pixels since the camera last read them
   zoom: 0, // wheel notches since the camera last read them (+ = away)
   jump: false,
-  steer: false, // right mouse button (or a touch look-drag) held: steers the flying hair tip
   grapple: false, // Space: shoot the hair cable / let go of it
+  stopTip: false, // left click: pin the flying tip where it is, even in mid-air
   interact: false, // E: edge-triggered, cleared by the interaction system in main.js
 }
 
@@ -78,8 +78,8 @@ export function install(showMenu, canvasEl) {
   window.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch') return // touch.js owns touch (stick, look, buttons)
     const onWorld = e.target.tagName === 'CANVAS'
-    if (e.button === 2) inputState.steer = true
     if (e.button === 2 && !lockEverGranted) orbiting = true
+    if (e.button === 0) inputState.stopTip = true
     if (e.button === 0 && onWorld) {
       // A click on the world takes the cursor (resuming play after Escape).
       armed = true
@@ -88,10 +88,7 @@ export function install(showMenu, canvasEl) {
   })
   window.addEventListener('pointerup', (e) => {
     if (e.pointerType === 'touch') return
-    if (e.button === 2) {
-      orbiting = false
-      inputState.steer = false
-    }
+    if (e.button === 2) orbiting = false
   })
   window.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'touch') return
@@ -114,7 +111,6 @@ export function install(showMenu, canvasEl) {
   window.addEventListener('blur', () => {
     held.clear()
     orbiting = false
-    inputState.steer = false
     inputState.jump = false
     inputState.grapple = false
     recomputeMove()

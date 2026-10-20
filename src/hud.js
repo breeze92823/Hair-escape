@@ -1,11 +1,14 @@
 // DOM HUD over the canvas, styled after the Roblox-sim look in the reference:
-// the navy quest pill top-centre, the Rebirth / Wins counters and the 2x3 button
-// grid down the left (Shop, Backpack, Rebirth, Teleport, Claim, Hair), the bottom
+// the navy quest pill top-centre, the Rebirth / Wins counters and the 2-column button
+// grid down the left (Backpack, Rebirth, Teleport, Hair), the bottom
 // stack of the hair counter over the Level bar and the four level packs, and the
 // Starter Pack / x2 Hair offers on the right. Plus prompts, toasts, "+N" popups,
 // a chat log and the panels the buttons open.
 import * as game from './game/state.js'
 import { clamp, DEV_MODE } from './config.js'
+import { playSfx } from './sfx.js'
+import { CHARMS } from './game/cosmetics.js'
+import { TAB_ICONS, charmIcon, colorIcon } from './salon/icons.js'
 
 // Dev runs (same test as the save skip in state.js) can teleport to any built stage, ignoring its Level / Wins requirement.
 const FREE_TELEPORT = DEV_MODE || import.meta.env.DEV || import.meta.env.MODE === 'development'
@@ -86,13 +89,11 @@ const CSS = `
 .hud-tile:active { transform: scale(0.96); }
 .hud-tile > svg { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); width: 86px; height: 86px; filter: drop-shadow(0 3px 0 rgba(0,0,0,0.3)); }
 .hud-tile .lbl { position: relative; font-size: 26px; line-height: 1; letter-spacing: 0.01em; white-space: nowrap; }
-.hud-tile.shop { background: linear-gradient(#f77cff, #d23fe6); }
 .hud-tile.backpack { background: linear-gradient(#ffbf45, #ff9a14); }
 .hud-tile.rebirth { background: linear-gradient(#64c0ff, #2f8ff0); }
 .hud-tile.teleport { background: linear-gradient(#c977ff, #9a3df0); }
-.hud-tile.claim { background: linear-gradient(#72ec4c, #36c21c); }
 .hud-tile.hair { background: linear-gradient(#ffe24a, #ffbe14); }
-.hud-tile.rebirth .lbl, .hud-tile.claim .lbl { color: #ffe02a; }
+.hud-tile.rebirth .lbl { color: #ffe02a; }
 .hud-tile .tag { position: absolute; top: -26px; right: -18px; transform: rotate(10deg); font-size: 34px; line-height: 1; color: #ff9d1a; -webkit-text-stroke: 0.2em #b8160a; paint-order: stroke fill; text-shadow: 0 3px 0 rgba(0,0,0,0.3); }
 .hud-tile .bang { position: absolute; top: -12px; right: -12px; width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(#ff4d5a, #d81a28); border: 3px solid #fff; display: none; place-items: center; font-size: 26px; line-height: 1; color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.45); animation: bang 1.2s ease-in-out infinite; }
 .hud-tile.alert .bang { display: grid; }
@@ -167,7 +168,10 @@ const CSS = `
 .hud-toast { font-size: clamp(24px, 3.2vw, 46px); animation: toast 2.6s ease-out forwards; white-space: nowrap; }
 @keyframes toast { 0% { opacity: 0; transform: scale(0.4) } 10% { opacity: 1; transform: scale(1.12) } 18% { transform: scale(1) } 80% { opacity: 1 } 100% { opacity: 0; transform: translateY(-30px) } }
 
-.hud-pop { position: absolute; font-size: 30px; color: #ffd21a; transform: translate(-50%, -50%); animation: pop 0.9s ease-out forwards; }
+.hud-pop { position: absolute; display: flex; align-items: center; gap: 6px; font-size: clamp(26px, 3vw, 38px); color: #ffd77a; transform: translate(-50%, -50%); animation: pop 0.9s ease-out forwards; }
+.hud-pop-ico { display: block; width: 1.15em; height: 1.15em; filter: drop-shadow(0 0 8px rgba(255, 120, 200, 0.9)); animation: pop-whirl 0.9s cubic-bezier(0.3, 0.6, 0.5, 1) forwards; }
+.hud-pop-ico > svg { width: 100%; height: 100%; display: block; }
+@keyframes pop-whirl { 0% { transform: rotate(0deg) scale(0.4) } 25% { transform: rotate(240deg) scale(1.25) } 100% { transform: rotate(900deg) scale(0.85) } }
 @keyframes pop { 0% { opacity: 0; transform: translate(-50%, -20%) scale(0.5) } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1.15) } 100% { opacity: 0; transform: translate(-50%, -260%) scale(0.9) } }
 
 .hud-chat { position: absolute; top: calc(80px * var(--t) + 6px + var(--tp)); left: calc(20px * var(--s) + var(--l)); width: 340px; max-height: 120px; padding: 10px 12px; border-radius: 12px; background: rgba(18,18,24,0.6); font-size: 15px; font-weight: 500; display: none; flex-direction: column; gap: 4px; overflow: hidden; }
@@ -239,6 +243,8 @@ const CSS = `
 // The Teleport window (stage list), laid out in reference pixels at 1920x1000
 // and scaled by --k (set from the viewport) so it keeps its proportions.
 const u = (n) => `calc(${n} * var(--k, 1px))`
+// Two-tone stud pattern (the brick look on cards and buttons).
+const STUDS = (dark, light) => `background-image: radial-gradient(circle at 42% 58%, ${dark} 27%, transparent 31%), radial-gradient(circle at 50% 50%, ${light} 27%, transparent 31%); background-size: ${u(36)} ${u(36)};`
 const TP_CSS = `
 #hud .tp-win { position: absolute; top: 50%; left: 50%; width: ${u(1170)}; height: ${u(665)}; transform: translate(-46%, -44%); display: none; pointer-events: auto; z-index: 20; }
 #hud .tp-win.open { display: block; }
@@ -297,13 +303,52 @@ const TP_CSS = `
 #hud .tp-tab.worlds { width: ${u(132)}; background: #3878d6; }
 #hud .tp-tab.on { width: ${u(146)}; }
 #hud .tp-tab:not(.on) { filter: brightness(0.9); }
+/* Worlds tab: the globe badge and a row of world cards replace the portal, header and stage list. */
+#hud .tp-globe { position: absolute; left: ${u(-56)}; top: ${u(-70)}; width: ${u(170)}; height: ${u(170)}; z-index: 3; display: none; }
+#hud .tp-globe svg { width: 100%; height: 100%; filter: drop-shadow(0 ${u(5)} 0 rgba(0,0,0,0.3)); }
+#hud .tp-worlds { position: absolute; left: ${u(40)}; right: ${u(40)}; top: ${u(96)}; bottom: ${u(40)}; display: none; justify-content: center; align-items: flex-start; gap: ${u(28)}; }
+#hud .tp-win.worlds :is(.tp-portal, .tp-head, .tp-list) { display: none; }
+#hud .tp-win.worlds .tp-globe { display: block; }
+#hud .tp-win.worlds .tp-worlds { display: flex; }
+#hud .tp-card { position: relative; flex: 1; max-width: ${u(336)}; height: ${u(506)}; padding: ${u(16)} ${u(16)} ${u(18)}; border-radius: ${u(22)}; border: ${u(6)} solid #24252e;
+  display: flex; flex-direction: column; align-items: center; line-height: 1; text-align: center; }
+#hud .tp-card.cur { background-color: #4cc456; ${STUDS('rgba(0,60,0,0.16)', 'rgba(255,255,255,0.16)')} box-shadow: inset 0 0 0 ${u(5)} #8ef08a; }
+#hud .tp-card.lock { background-color: #4a96e2; ${STUDS('rgba(0,40,120,0.16)', 'rgba(255,255,255,0.14)')} box-shadow: inset 0 0 0 ${u(5)} #9fd2ff; }
+#hud .tp-card.soon { background-color: #8b8e99; ${STUDS('rgba(30,30,40,0.16)', 'rgba(255,255,255,0.12)')} box-shadow: inset 0 0 0 ${u(5)} #b8bbc4; }
+#hud .tp-card .art { position: relative; width: 100%; height: ${u(212)}; flex: none; border-radius: ${u(16)}; border: ${u(5)} solid #24252e; overflow: hidden; background: #24252e; }
+#hud .tp-card .art > svg { display: block; width: 100%; height: 100%; }
+#hud .tp-card.soon .art > svg { filter: grayscale(0.35) brightness(0.62); }
+#hud .tp-card .art .lock { position: absolute; left: 50%; top: 50%; width: ${u(108)}; height: ${u(116)}; transform: translate(-50%, -50%); }
+#hud .tp-card .art .lock svg { width: 100%; height: 100%; filter: drop-shadow(0 ${u(4)} 0 rgba(0,0,0,0.4)); }
+#hud .tp-card .nm { margin-top: ${u(12)}; font-size: ${u(60)}; white-space: nowrap; }
+#hud .tp-card .sub { margin-top: ${u(2)}; font-size: ${u(36)}; color: #ffd21a; white-space: nowrap; }
+#hud .tp-card .st { margin-top: ${u(10)}; font-size: ${u(29)}; line-height: 1.1; }
+#hud .tp-card.cur .st { color: #9dff6e; }
+#hud .tp-card.lock .st { color: #ffd21a; }
+#hud .tp-wbtn { flex: none; margin-top: auto; min-width: ${u(216)}; height: ${u(92)}; padding: 0 ${u(18)}; border-radius: ${u(36)}; border: ${u(5)} solid #15151f; display: inline-flex; align-items: center; justify-content: center; gap: ${u(6)};
+  font-size: ${u(36)}; line-height: 1; white-space: nowrap; transition: transform .1s, filter .1s; }
+#hud .tp-wbtn.here { background: linear-gradient(#3fdc5a, #1fae3c); box-shadow: inset 0 ${u(4)} 0 rgba(255,255,255,0.35); cursor: default; }
+#hud .tp-wbtn.rb { border-radius: ${u(8)}; background-color: #ffc928; ${STUDS('rgba(170,100,0,0.18)', 'rgba(255,240,170,0.5)')} box-shadow: inset 0 0 0 ${u(4)} #ffe27a, inset 0 ${u(-6)} 0 rgba(170,100,0,0.25); font-size: ${u(30)}; }
+#hud .tp-wbtn.go { border-radius: ${u(8)}; background-color: #4bdc3a; box-shadow: inset 0 0 0 ${u(4)} #8cff6e, inset 0 ${u(-6)} 0 rgba(0,90,0,0.25); }
+#hud .tp-wbtn:is(.rb, .go):hover { transform: scale(1.05); filter: brightness(1.06); }
+#hud .tp-wbtn:is(.rb, .go):active { transform: scale(0.96); }
+#hud .tp-wbtn svg { width: ${u(48)}; height: ${u(48)}; flex: none; }
+/* Portrait Worlds tab: a narrower, taller window with the cards stacked as rows (picture left, text right), so it
+   can scale up enough for the buttons to stay tappable. */
+#hud .tp-win.worlds.portrait { width: ${u(720)}; height: ${u(1120)}; transform: translate(-43%, -50%); }
+#hud .tp-win.worlds.portrait .tp-worlds { flex-direction: column; align-items: stretch; top: ${u(110)}; bottom: ${u(30)}; gap: ${u(22)}; left: ${u(30)}; right: ${u(30)}; }
+#hud .tp-win.worlds.portrait .tp-card { flex: none; max-width: none; height: ${u(312)}; display: grid; grid-template-columns: ${u(250)} 1fr; grid-template-rows: auto auto auto 1fr; column-gap: ${u(18)}; justify-items: center; }
+#hud .tp-win.worlds.portrait .tp-card .art { grid-row: 1 / 5; height: 100%; }
+#hud .tp-win.worlds.portrait .tp-card .nm { margin-top: ${u(4)}; }
+#hud .tp-win.worlds.portrait .tp-wbtn { align-self: end; height: ${u(110)}; font-size: ${u(40)}; }
+#hud .tp-win.worlds.portrait .tp-wbtn.rb { font-size: ${u(32)}; }
 `
 
-// The Rebirth window (Before -> After cards, the level goal bar, Rebirth / Skip), laid out in reference pixels
-// at 1918x993 and scaled by --k like the Teleport window. Portrait stacks the Before column over the After one.
-const STUDS = (dark, light) => `background-image: radial-gradient(circle at 42% 58%, ${dark} 27%, transparent 31%), radial-gradient(circle at 50% 50%, ${light} 27%, transparent 31%); background-size: ${u(36)} ${u(36)};`
+// The Rebirth window, laid out in reference pixels at 1918x993 and scaled by --k like the Teleport window, with
+// three tabs: Rebirth (Before -> After cards, the level goal bar), Prestige (the multiplier, its prizes, the
+// rebirth goal) and Upgrades (rebirth-gated levels). Portrait stacks the columns.
 const RB_CSS = `
-#hud .rb-win { position: absolute; top: 50%; left: 50%; width: ${u(1486)}; transform: translate(-50%, -46%); display: none; pointer-events: auto; z-index: 20; }
+#hud .rb-win { position: absolute; top: 50%; left: 50%; width: ${u(1486)}; transform: translate(calc(-50% + ${u(76)}), -46%); display: none; pointer-events: auto; z-index: 20; }
 #hud .rb-win.open { display: block; }
 #hud:has(.rb-win.open) .hud-quest { visibility: hidden; }
 #hud .rb-body { position: relative; padding: ${u(92)} ${u(42)} ${u(34)}; border-radius: ${u(26)}; background-color: #e3e5eb; border: ${u(6)} solid #24252e;
@@ -328,7 +373,6 @@ const RB_CSS = `
 #hud .rb-card.gold { background-color: #ffc928; ${STUDS('rgba(170,100,0,0.18)', 'rgba(255,240,170,0.5)')} box-shadow: inset 0 0 0 ${u(4)} #ffe27a, inset 0 ${u(-10)} 0 rgba(170,100,0,0.25); }
 #hud .rb-card .ico { position: absolute; left: ${u(36)}; top: 50%; transform: translateY(-54%); width: ${u(104)}; height: ${u(112)}; }
 #hud .rb-card .ico svg { width: 100%; height: 100%; filter: drop-shadow(0 ${u(3)} 0 rgba(0,0,0,0.3)); }
-#hud .rb-card .ico.rb svg { transform: rotate(-8deg); }
 #hud .rb-card .big { font-size: ${u(64)}; -webkit-text-stroke: 0.16em #15151f; }
 #hud .rb-card .num { font-size: ${u(54)}; -webkit-text-stroke: 0.16em #15151f; }
 #hud .rb-card .sub { font-size: ${u(22)}; margin-top: ${u(2)}; color: #ffe02a; -webkit-text-stroke: 0.22em #15151f; letter-spacing: 0.02em; }
@@ -346,9 +390,6 @@ const RB_CSS = `
 #hud .rb-go { background-color: #c9ccd4; ${STUDS('rgba(60,66,84,0.12)', 'rgba(255,255,255,0.45)')} box-shadow: inset 0 0 0 ${u(4)} #eceef2, inset 0 ${u(-8)} 0 rgba(0,0,0,0.1); }
 #hud .rb-go.ready { background-color: #4bdc3a; ${STUDS('rgba(0,60,0,0.16)', 'rgba(255,255,255,0.18)')} box-shadow: inset 0 0 0 ${u(4)} #8cff6e, inset 0 ${u(-8)} 0 rgba(0,90,0,0.25); animation: rbpulse 1.2s ease-in-out infinite; }
 @keyframes rbpulse { 0%, 100% { transform: scale(1) } 50% { transform: scale(1.04) } }
-#hud .rb-skip { background-color: #ffc928; ${STUDS('rgba(170,100,0,0.18)', 'rgba(255,240,170,0.5)')} box-shadow: inset 0 0 0 ${u(4)} #ffe27a, inset 0 ${u(-8)} 0 rgba(170,100,0,0.25); padding-bottom: ${u(10)}; }
-#hud .rb-skip .note { position: absolute; bottom: ${u(-12)}; left: 50%; transform: translateX(-50%); font-size: ${u(25)}; white-space: nowrap; -webkit-text-stroke: 0.2em #15151f; }
-#hud .rb-skip .hud-price { position: absolute; top: ${u(-22)}; right: ${u(58)}; font-size: ${u(34)}; transform: rotate(16deg); }
 #hud .rb-win.portrait { width: ${u(800)}; }
 #hud .rb-win.portrait .rb-body { padding: ${u(110)} ${u(36)} ${u(40)}; }
 #hud .rb-win.portrait .rb-cols { grid-template-columns: 1fr; }
@@ -358,6 +399,103 @@ const RB_CSS = `
 #hud .rb-win.portrait .rb-keep { font-size: ${u(30)}; }
 #hud .rb-win.portrait .rb-btns { flex-direction: column; align-items: center; gap: ${u(36)}; margin-top: ${u(24)}; }
 #hud .rb-win.portrait .rb-btn { width: 100%; height: ${u(116)}; }
+
+/* Tabs down the left edge (Rebirth / Prestige / Upgrades); only the picked tab's pane shows. Landscape shifts the
+   window right by half the tab overhang (in .rb-win above) so the pair stays centred. Portrait puts the tabs in a row under the body. */
+#hud .rb-tabs { position: absolute; right: 100%; top: ${u(120)}; display: flex; flex-direction: column; align-items: flex-end; gap: ${u(18)}; margin-right: ${u(-14)}; }
+#hud .rb-tab { position: relative; width: ${u(164)}; height: ${u(160)}; padding: ${u(6)} ${u(14)} ${u(10)} ${u(4)}; white-space: nowrap; border-radius: ${u(16)} 0 0 ${u(16)}; border: ${u(5)} solid #24252e; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  font-size: ${u(30)}; line-height: 1; box-shadow: inset 0 ${u(4)} 0 rgba(255,255,255,0.3), 0 ${u(4)} 0 rgba(0,0,0,0.3); transition: transform .1s, width .1s; }
+#hud .rb-tab:hover { transform: translateX(${u(-4)}); }
+#hud .rb-tab svg { width: ${u(100)}; height: ${u(100)}; margin-bottom: ${u(2)}; filter: drop-shadow(0 ${u(3)} 0 rgba(0,0,0,0.3)); }
+#hud .rb-tab.rebirth { background-color: #2ea4f6; ${STUDS('rgba(0,40,120,0.16)', 'rgba(255,255,255,0.14)')} }
+#hud .rb-tab.prestige { background-color: #ffc928; ${STUDS('rgba(170,100,0,0.18)', 'rgba(255,240,170,0.5)')} }
+#hud .rb-tab.upgrades { background-color: #3fcf3a; ${STUDS('rgba(0,60,0,0.16)', 'rgba(255,255,255,0.18)')} }
+#hud .rb-tab.on { width: ${u(182)}; }
+#hud .rb-tab:not(.on) { filter: brightness(0.88); }
+#hud .rb-tab .bang { display: none; position: absolute; left: ${u(-22)}; top: ${u(-18)}; width: ${u(48)}; height: ${u(52)}; border-radius: ${u(8)}; border: ${u(4)} solid #24252e; background: #e8243a; font-size: ${u(38)}; place-items: center; -webkit-text-stroke: 0.12em #15151f; }
+#hud .rb-tab.alert .bang { display: grid; }
+#hud .rb-pane { display: none; }
+#hud .rb-win[data-tab="rebirth"] .rb-pane.rebirth, #hud .rb-win[data-tab="prestige"] .rb-pane.prestige, #hud .rb-win[data-tab="upgrades"] .rb-pane.upgrades { display: block; }
+#hud .rb-win.portrait { transform: translate(-50%, -50%); }
+#hud .rb-win.portrait.open { display: flex; flex-direction: column; }
+#hud .rb-win.portrait .rb-tabs { order: 2; position: static; flex-direction: row; justify-content: center; align-items: flex-start; margin: ${u(-14)} 0 0; }
+#hud .rb-win.portrait .rb-tab { width: ${u(200)}; height: ${u(150)}; border-radius: 0 0 ${u(16)} ${u(16)}; padding: ${u(14)} ${u(6)} ${u(8)}; }
+#hud .rb-win.portrait .rb-tab.on { width: ${u(200)}; height: ${u(166)}; }
+#hud .rb-win.portrait .rb-tab:hover { transform: none; }
+
+/* Prestige: Before -> After multiplier cards, the next prestige's prizes, what resets, the rebirth goal bar. */
+#hud .pr-cols { display: grid; grid-template-columns: 1fr ${u(150)} 1fr; align-items: end; }
+#hud .pr-arrow { height: ${u(150)}; display: grid; place-items: center; }
+#hud .pr-arrow svg { width: ${u(50)}; height: ${u(64)}; }
+#hud .pr-card { position: relative; height: ${u(150)}; border-radius: ${u(14)}; border: ${u(5)} solid #24252e; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-left: ${u(150)}; line-height: 1; }
+#hud .pr-card.gold { background-color: #ffc928; ${STUDS('rgba(170,100,0,0.18)', 'rgba(255,240,170,0.5)')} box-shadow: inset 0 0 0 ${u(4)} #ffe27a, inset 0 ${u(-10)} 0 rgba(170,100,0,0.25); }
+#hud .pr-card.pink { background-color: #e45cf0; ${STUDS('rgba(110,0,120,0.16)', 'rgba(255,255,255,0.16)')} box-shadow: inset 0 0 0 ${u(4)} #ffa8ff, inset 0 ${u(-10)} 0 rgba(110,0,120,0.25); }
+#hud .pr-card .ico { position: absolute; left: ${u(14)}; top: 50%; transform: translateY(-50%); width: ${u(150)}; height: ${u(126)}; }
+#hud .pr-card .ico svg { width: 100%; height: 100%; filter: drop-shadow(0 ${u(3)} 0 rgba(0,0,0,0.3)); }
+#hud .pr-card .big { font-size: ${u(76)}; -webkit-text-stroke: 0.15em #15151f; }
+#hud .pr-card .sub { font-size: ${u(36)}; margin-top: ${u(2)}; color: #ffe02a; -webkit-text-stroke: 0.2em #15151f; }
+#hud .pr-prizes { display: flex; align-items: center; justify-content: center; gap: ${u(18)}; margin-top: ${u(12)}; min-height: ${u(176)}; }
+#hud .pr-plbl { width: ${u(230)}; font-size: ${u(42)}; line-height: 1.05; text-align: center; color: #ffd21a; -webkit-text-stroke: 0.18em #15151f; }
+#hud .pr-prize { position: relative; width: ${u(172)}; height: ${u(176)}; border-radius: ${u(10)}; border: ${u(5)} solid #24252e; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: ${u(6)} ${u(4)}; line-height: 1;
+  box-shadow: inset 0 0 0 ${u(4)} rgba(255,255,255,0.35); }
+#hud .pr-prize.skin { background: radial-gradient(circle at 50% 50%, #ffd6f4, #ff5f9a 70%); }
+#hud .pr-prize.charm { background: radial-gradient(circle at 50% 50%, #fff6c0, #ffa21a 70%); }
+#hud .pr-prize.slot { background: radial-gradient(circle at 50% 50%, #e6c8ff, #9a3df0 70%); }
+#hud .pr-prize .hd { font-size: ${u(25)}; -webkit-text-stroke: 0.18em #15151f; white-space: nowrap; }
+#hud .pr-prize .ico { flex: 1; width: 70%; display: grid; place-items: center; }
+#hud .pr-prize .ico svg { width: 100%; height: 100%; max-height: ${u(90)}; filter: drop-shadow(0 ${u(3)} 0 rgba(0,0,0,0.3)); }
+#hud .pr-prize .nm { font-size: ${u(19)}; text-align: center; -webkit-text-stroke: 0.2em #15151f; }
+#hud .pr-reset, #hud .pr-keep { margin: ${u(8)} 0 0; font-size: ${u(32)}; line-height: 1.1; text-align: center; color: #ff3d6a; -webkit-text-stroke: 0.18em #15151f; }
+#hud .pr-keep { margin: ${u(2)} 0 ${u(10)}; font-size: ${u(24)}; color: #7dff3a; }
+#hud .pr-barwrap { position: relative; margin: 0 ${u(22)} 0 ${u(70)}; }
+#hud .pr-barwrap .rb-bar { margin: 0; }
+#hud .pr-barwrap .rb-bar .fill { background: linear-gradient(#ffe46b, #ffb800); }
+#hud .pr-barwrap .rb-bar .lbl { left: ${u(96)}; }
+#hud .pr-barwrap .bico { position: absolute; left: ${u(-30)}; top: 50%; transform: translateY(-50%) rotate(-8deg); width: ${u(96)}; height: ${u(96)}; z-index: 1; }
+#hud .pr-barwrap .bico svg { width: 100%; height: 100%; filter: drop-shadow(0 ${u(3)} 0 rgba(0,0,0,0.3)); }
+#hud .pr-go.ready { background-color: #b44cf0; ${STUDS('rgba(60,0,110,0.18)', 'rgba(255,255,255,0.14)')} box-shadow: inset 0 0 0 ${u(4)} #dc9bff, inset 0 ${u(-8)} 0 rgba(60,0,110,0.3); animation: rbpulse 1.2s ease-in-out infinite; }
+#hud .pr-go.sure { background-color: #e8243a; box-shadow: inset 0 0 0 ${u(4)} #ff8c94; animation: none; }
+#hud .pr-go.sure .t { font-size: ${u(46)}; }
+#hud .rb-win.portrait .pr-cols { grid-template-columns: 1fr; }
+#hud .rb-win.portrait .pr-arrow { height: ${u(60)}; }
+#hud .rb-win.portrait .pr-arrow svg { transform: rotate(90deg); }
+#hud .rb-win.portrait .pr-prizes { flex-wrap: wrap; }
+#hud .rb-win.portrait .pr-plbl { width: 100%; }
+
+/* Upgrades: the rebirth count, the hint, and a scrolling 2-column card grid (1 column in portrait). */
+#hud .up-head { display: flex; align-items: center; gap: ${u(40)}; margin: ${u(-10)} 0 ${u(18)}; }
+#hud .up-count { flex: none; width: ${u(420)}; height: ${u(66)}; border-radius: ${u(12)}; border: ${u(5)} solid #24252e; display: flex; align-items: center; justify-content: center; gap: ${u(8)}; font-size: ${u(46)}; line-height: 1;
+  background-color: #2ea4f6; ${STUDS('rgba(0,40,120,0.16)', 'rgba(255,255,255,0.14)')} box-shadow: inset 0 0 0 ${u(4)} #7fd2ff; }
+#hud .up-count svg { width: ${u(58)}; height: ${u(58)}; }
+#hud .up-hint { flex: 1; font-size: ${u(32)}; line-height: 1.1; text-align: center; -webkit-text-stroke: 0.18em #15151f; }
+#hud .up-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: ${u(24)}; max-height: ${u(520)}; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: ${u(4)} ${u(14)} ${u(4)} ${u(4)}; }
+#hud .up-grid::-webkit-scrollbar { width: ${u(12)}; }
+#hud .up-grid::-webkit-scrollbar-thumb { background: #8e94a0; border-radius: ${u(6)}; }
+#hud .up-card { position: relative; height: ${u(244)}; border-radius: ${u(22)}; border: ${u(5)} solid #24252e; padding: ${u(26)} ${u(180)} ${u(20)} ${u(150)}; display: flex; flex-direction: column; justify-content: space-between; line-height: 1; }
+#hud .up-card.blue { background-color: #2ea4f6; ${STUDS('rgba(0,40,120,0.16)', 'rgba(255,255,255,0.14)')} box-shadow: inset 0 0 0 ${u(5)} #7fd2ff; }
+#hud .up-card.gold { background-color: #ffc928; ${STUDS('rgba(170,100,0,0.18)', 'rgba(255,240,170,0.5)')} box-shadow: inset 0 0 0 ${u(5)} #ffe27a; }
+#hud .up-card.purple { background-color: #b44cf0; ${STUDS('rgba(60,0,110,0.18)', 'rgba(255,255,255,0.14)')} box-shadow: inset 0 0 0 ${u(5)} #dc9bff; }
+#hud .up-card.orange { background-color: #ff9a1a; ${STUDS('rgba(150,60,0,0.18)', 'rgba(255,220,150,0.3)')} box-shadow: inset 0 0 0 ${u(5)} #ffc46b; }
+#hud .up-card.green { background-color: #3fcf3a; ${STUDS('rgba(0,60,0,0.16)', 'rgba(255,255,255,0.18)')} box-shadow: inset 0 0 0 ${u(5)} #8cff6e; }
+#hud .up-card.pink { background-color: #e04cf0; ${STUDS('rgba(110,0,120,0.16)', 'rgba(255,255,255,0.16)')} box-shadow: inset 0 0 0 ${u(5)} #ffa8ff; }
+#hud .up-card .ico { position: absolute; left: ${u(8)}; top: 50%; transform: translateY(-50%); width: ${u(140)}; height: ${u(160)}; }
+#hud .up-card .ico svg { width: 100%; height: 100%; filter: drop-shadow(0 ${u(4)} 0 rgba(0,0,0,0.3)); }
+#hud .up-card .nm { font-size: ${u(44)}; -webkit-text-stroke: 0.16em #15151f; white-space: nowrap; }
+#hud .up-card .fx { font-size: ${u(30)}; -webkit-text-stroke: 0.18em #15151f; white-space: nowrap; }
+#hud .up-card .fx .nx { color: #7dff3a; }
+#hud .up-card .pips { display: flex; align-items: center; gap: ${u(4)}; }
+#hud .up-card .pips i { width: ${u(20)}; height: ${u(36)}; border-radius: ${u(10)}; border: ${u(3)} solid #15151f; background: rgba(0,0,0,0.3); }
+#hud .up-card .pips i.on { background: linear-gradient(#fff27a, #ffc21a); }
+#hud .up-card .pips .cnt { margin-left: ${u(8)}; font-size: ${u(34)}; color: #ffe02a; -webkit-text-stroke: 0.2em #15151f; }
+#hud .up-go { position: absolute; right: ${u(16)}; top: 50%; transform: translateY(-50%); width: ${u(150)}; height: ${u(120)}; border-radius: ${u(12)}; border: ${u(5)} solid #24252e; display: flex; align-items: center; justify-content: center; gap: ${u(4)};
+  font-size: ${u(50)}; line-height: 1; background: #3e6aa8; box-shadow: inset 0 0 0 ${u(4)} #6f95cc, inset 0 ${u(-8)} 0 rgba(0,0,0,0.2); transition: transform .1s, filter .1s; }
+#hud .up-go svg { width: ${u(76)}; height: ${u(76)}; filter: drop-shadow(0 ${u(2)} 0 rgba(0,0,0,0.3)); }
+#hud .up-go.ready { background-color: #4bdc3a; ${STUDS('rgba(0,60,0,0.16)', 'rgba(255,255,255,0.18)')} box-shadow: inset 0 0 0 ${u(4)} #8cff6e, inset 0 ${u(-8)} 0 rgba(0,90,0,0.25); animation: uppulse 1.2s ease-in-out infinite; }
+@keyframes uppulse { 0%, 100% { transform: translateY(-50%) scale(1) } 50% { transform: translateY(-50%) scale(1.06) } }
+#hud .up-go:hover { filter: brightness(1.08); }
+#hud .up-go.max { background-color: #c9ccd4; ${STUDS('rgba(60,66,84,0.12)', 'rgba(255,255,255,0.45)')} box-shadow: inset 0 0 0 ${u(4)} #eceef2; font-size: ${u(30)}; cursor: default; }
+#hud .rb-win.portrait .up-head { flex-direction: column; gap: ${u(12)}; }
+#hud .rb-win.portrait .up-grid { grid-template-columns: minmax(0, 1fr); max-height: ${u(1000)}; }
 `
 
 // Grey building brick with a flagpole and a red flag (a stage marker): `mark`
@@ -377,27 +515,70 @@ const BIG_PORTAL_ICON = (() => {
 })()
 // Blue globe with green land and an orange ring (the Worlds tab).
 const GLOBE_ICON = `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" fill="#2f8fff" stroke="#14244a" stroke-width="3"/><path d="M18 20c5-3 9 0 12 4s-2 7 2 10 7 0 7 5-6 9-11 9c-2-4 1-8-3-11s-9 0-10-5 0-9 3-12zM40 14c4 1 8 4 10 9-4 1-7-1-9-3s-3-4-1-6z" fill="#5fd13a" stroke="#1d5a10" stroke-width="2" stroke-linejoin="round"/><path d="M14 22c6-2 12 0 14 2" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity="0.8"/><ellipse cx="32" cy="34" rx="30" ry="9" fill="none" stroke="#24252e" stroke-width="7" transform="rotate(-18 32 34)"/><ellipse cx="32" cy="34" rx="30" ry="9" fill="none" stroke="#ffb020" stroke-width="3.5" transform="rotate(-18 32 34)"/></svg>`
+// World card pictures (Worlds tab), keyed by a world's `art`: Hairy Heights (sea, voxel pillars, a hair
+// cable), Wonder Worlds (lava cave) and the mystery world (night castle and rainbow).
+const voxel = (x, y, w, h, side, top) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${side}" stroke="#24252e" stroke-width="2.5"/><rect x="${x}" y="${y}" width="${w}" height="9" fill="${top}" stroke="#24252e" stroke-width="2.5"/>`
+const WORLD_ART = {
+  heights: `<svg viewBox="0 0 300 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="wa1s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5cc8ff"/><stop offset="1" stop-color="#d6f3ff"/></linearGradient><linearGradient id="wa1w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2bb4f0"/><stop offset="1" stop-color="#0a62b8"/></linearGradient></defs>
+    <rect width="300" height="200" fill="url(#wa1s)"/><ellipse cx="70" cy="34" rx="34" ry="11" fill="#fff" opacity="0.9"/><ellipse cx="226" cy="22" rx="28" ry="9" fill="#fff" opacity="0.85"/>
+    ${voxel(196, 72, 26, 40, '#d9733a', '#ff9a52')}${voxel(222, 60, 30, 52, '#c8602e', '#ff8a44')}${voxel(252, 80, 48, 32, '#7f8794', '#b8bfca')}
+    <rect y="104" width="300" height="96" fill="url(#wa1w)"/><path d="M90 128q10-5 20 0t20 0M170 160q10-5 20 0t20 0M24 176q10-5 20 0t20 0" fill="none" stroke="#bff0ff" stroke-width="3" stroke-linecap="round"/>
+    ${voxel(0, 86, 74, 114, '#8a5a30', '#5fd13a')}${voxel(126, 118, 34, 82, '#6e7684', '#aab2be')}${voxel(176, 134, 34, 66, '#6e7684', '#aab2be')}${voxel(228, 112, 34, 88, '#6e7684', '#aab2be')}
+    <path d="M140 170l14-20 6 20z" fill="#7f8a9a" stroke="#24252e" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M44 84Q140 40 248 58" fill="none" stroke="#5a3200" stroke-width="9" stroke-linecap="round"/><path d="M44 84Q140 40 248 58" fill="none" stroke="#ffd21a" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="160" cy="52" r="9" fill="#ffd9b0" stroke="#24252e" stroke-width="2.5"/><path d="M152 60l-6 16h28l-6-16z" fill="#ff5fb4" stroke="#24252e" stroke-width="2.5" stroke-linejoin="round"/></svg>`,
+  wonder: `<svg viewBox="0 0 300 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="wa2s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a1210"/><stop offset="1" stop-color="#7a2a14"/></linearGradient><linearGradient id="wa2l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb21a"/><stop offset="1" stop-color="#e8361a"/></linearGradient></defs>
+    <rect width="300" height="200" fill="url(#wa2s)"/><circle cx="150" cy="70" r="46" fill="#8a3a1a" opacity="0.55"/><path d="M128 64q6-8 12 0M160 64q6-8 12 0M132 86q18 14 36 0" fill="none" stroke="#3a1210" stroke-width="5" stroke-linecap="round" opacity="0.7"/>
+    <rect x="40" y="0" width="14" height="140" fill="#ff7a1a" opacity="0.75"/><rect x="246" y="0" width="12" height="140" fill="#ff7a1a" opacity="0.75"/>
+    <rect y="140" width="300" height="60" fill="url(#wa2l)"/><circle cx="70" cy="168" r="6" fill="#ffe27a"/><circle cx="210" cy="180" r="5" fill="#ffe27a"/>
+    ${voxel(0, 104, 60, 96, '#3a2a28', '#5a4440')}${voxel(92, 134, 40, 66, '#3a2a28', '#5a4440')}${voxel(170, 120, 40, 80, '#3a2a28', '#5a4440')}${voxel(240, 100, 60, 100, '#3a2a28', '#5a4440')}</svg>`,
+  mystery: `<svg viewBox="0 0 300 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="wa3s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1a6a"/><stop offset="1" stop-color="#6a4ab0"/></linearGradient></defs>
+    <rect width="300" height="200" fill="url(#wa3s)"/><circle cx="40" cy="30" r="2" fill="#fff"/><circle cx="110" cy="18" r="1.5" fill="#fff"/><circle cx="250" cy="40" r="2" fill="#fff"/><circle cx="200" cy="14" r="1.5" fill="#fff"/>
+    <path d="M150 170a110 110 0 0 1 150-90" fill="none" stroke="#ff5a5a" stroke-width="7" opacity="0.7"/><path d="M160 172a104 104 0 0 1 140-82" fill="none" stroke="#ffd21a" stroke-width="7" opacity="0.7"/><path d="M170 174a98 98 0 0 1 130-74" fill="none" stroke="#4be03a" stroke-width="7" opacity="0.7"/><path d="M180 176a92 92 0 0 1 120-66" fill="none" stroke="#3aa0ff" stroke-width="7" opacity="0.7"/>
+    <path d="M60 150V80l12-18 12 18v20h14V64l16-26 16 26v36h14V80l12-18 12 18v70z" fill="#3a2a7a" stroke="#1a103a" stroke-width="3" stroke-linejoin="round"/>
+    <ellipse cx="114" cy="158" rx="80" ry="18" fill="#4a3a8a"/><path d="M50 160q64 40 128 0" fill="#2a1a5a"/><path d="M200 150l10-20 10 20z" fill="#7fe8ff" opacity="0.8"/></svg>`,
+}
 // White chevron with a dark outline (the Before -> After arrows).
 const CHEVRON_ICON = `<svg viewBox="0 0 44 56"><path d="M12 8l20 20-20 20" fill="none" stroke="#15151f" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8l20 20-20 20" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+// Five-point star path round (cx, cy), outer radius R, inner r.
+const starPath = (cx, cy, R, r) => Array.from({ length: 10 }, (_, i) => {
+  const a = (i / 10) * Math.PI * 2 - Math.PI / 2
+  const d = i % 2 ? r : R
+  return `${i ? 'L' : 'M'}${(cx + Math.cos(a) * d).toFixed(1)} ${(cy + Math.sin(a) * d).toFixed(1)}`
+}).join('') + 'z'
+// Gold star with a pink gem and white wings (Prestige).
+const PRESTIGE_ICON = (() => {
+  const wing = 'M40 50C26 30 8 28 4 34c6 2 8 5 8 8-5 0-8 3-8 6 6 0 9 2 10 5-4 2-5 5-4 8 10-2 22-6 30-11z'
+  const sparkle = (x, y, s) => `<path d="M${x} ${y - s}Q${x} ${y} ${x + s} ${y}Q${x} ${y} ${x} ${y + s}Q${x} ${y} ${x - s} ${y}Q${x} ${y} ${x} ${y - s}z" fill="#fff" stroke="#24252e" stroke-width="1.5"/>`
+  return `<svg viewBox="0 0 120 100"><path d="${wing}" fill="#fff" stroke="#24252e" stroke-width="3.5" stroke-linejoin="round"/><path d="${wing}" transform="matrix(-1 0 0 1 120 0)" fill="#fff" stroke="#24252e" stroke-width="3.5" stroke-linejoin="round"/><path d="M12 40c6 1 12 4 18 8M12 54c6 0 12-1 18-3" transform="matrix(-1 0 0 1 120 0)" fill="none" stroke="#c9d8ff" stroke-width="2.5" stroke-linecap="round"/><path d="M12 40c6 1 12 4 18 8M12 54c6 0 12-1 18-3" fill="none" stroke="#c9d8ff" stroke-width="2.5" stroke-linecap="round"/><path d="${starPath(60, 54, 38, 17)}" fill="#ffd21a" stroke="#24252e" stroke-width="4" stroke-linejoin="round"/><path d="${starPath(60, 54, 30, 13)}" fill="none" stroke="#fff27a" stroke-width="2.5" stroke-linejoin="round"/><circle cx="60" cy="56" r="10" fill="#ff3dc8" stroke="#5a0a3a" stroke-width="3"/><circle cx="57" cy="53" r="3" fill="#ffc8f0"/>${sparkle(100, 16, 8)}${sparkle(22, 86, 6)}</svg>`
+})()
+// Green up arrow over a chevron (Upgrades).
+const UPGRADES_ICON = `<svg viewBox="0 0 64 64"><path d="M32 4 56 30H42v12H22V30H8z" fill="#3fdc3a" stroke="#0d4a0a" stroke-width="3.5" stroke-linejoin="round"/><path d="M32 10 48 27" stroke="#b6ff7a" stroke-width="3.5" stroke-linecap="round"/><path d="M14 52 32 42l18 10v8L32 50 14 60z" fill="#3fdc3a" stroke="#0d4a0a" stroke-width="3.5" stroke-linejoin="round"/></svg>`
+// Upgrade card art: sleeping moon in a nightcap, the cable's T-handle on a gold rope, a four-leaf clover, a winged sneaker.
+const MOON_ICON = `<svg viewBox="0 0 64 64"><path d="M30 10a24 24 0 1 0 26 30A20 20 0 0 1 30 10z" fill="#ffe04a" stroke="#5a3a00" stroke-width="3" stroke-linejoin="round"/><path d="M22 36q3 3 6 0M34 44q3 3 6 0" fill="none" stroke="#5a3a00" stroke-width="2.6" stroke-linecap="round"/><path d="M14 22c4-12 16-16 24-12l8-6c-1 6 0 10 4 12-8-2-22 0-36 6z" fill="#4a8cff" stroke="#14244a" stroke-width="2.6" stroke-linejoin="round"/><circle cx="52" cy="16" r="4.5" fill="#fff" stroke="#14244a" stroke-width="2.4"/><text x="50" y="40" font-family="Fredoka, sans-serif" font-weight="700" font-size="14" fill="#5fd8ff" stroke="#14244a" stroke-width="3" paint-order="stroke">z</text><text x="56" y="30" font-family="Fredoka, sans-serif" font-weight="700" font-size="10" fill="#5fd8ff" stroke="#14244a" stroke-width="2.5" paint-order="stroke">z</text></svg>`
+const ZIP_ICON = `<svg viewBox="0 0 64 64"><path d="M2 16c10 4 20 6 30 6s20-2 30-6" fill="none" stroke="#5a3200" stroke-width="9" stroke-linecap="round"/><path d="M2 16c10 4 20 6 30 6s20-2 30-6" fill="none" stroke="#ffd21a" stroke-width="5" stroke-linecap="round" stroke-dasharray="6 3"/><circle cx="32" cy="22" r="7" fill="#ffc21a" stroke="#5a3200" stroke-width="3"/><path d="M32 28v18" stroke="#5a0a0a" stroke-width="10" stroke-linecap="round"/><path d="M32 28v18" stroke="#e8243a" stroke-width="5" stroke-linecap="round"/><rect x="10" y="44" width="44" height="12" rx="6" fill="#e8243a" stroke="#5a0a0a" stroke-width="3"/><path d="M4 30h12M2 38h10" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>`
+const CLOVER_ICON = (() => {
+  const leaf = (r) => `<path d="M32 32C20 30 14 18 22 12s12 4 10 20z" transform="rotate(${r} 32 32)" fill="#3fdc3a" stroke="#0d4a0a" stroke-width="3" stroke-linejoin="round"/>`
+  return `<svg viewBox="0 0 64 64"><path d="M32 34c2 10 6 18 14 24" fill="none" stroke="#0d4a0a" stroke-width="7" stroke-linecap="round"/><path d="M32 34c2 10 6 18 14 24" fill="none" stroke="#3fdc3a" stroke-width="3.5" stroke-linecap="round"/>${[0, 90, 180, 270].map((r) => leaf(r + 45)).join('')}<path d="M54 6l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#ffd21a" stroke="#5a3200" stroke-width="1.5"/></svg>`
+})()
+const SHOE_ICON = `<svg viewBox="0 0 64 64"><path d="M6 30c4-10 10-14 16-12-4 2-6 6-6 8 4-6 10-8 14-6-4 2-6 6-6 8z" fill="#fff" stroke="#24252e" stroke-width="2.6" stroke-linejoin="round"/><path d="M14 40c4-8 10-12 18-12 6 6 14 8 22 10 6 2 8 6 6 10H14z" fill="#e8243a" stroke="#5a0a0a" stroke-width="3" stroke-linejoin="round"/><path d="M12 48h50v4a4 4 0 0 1-4 4H16a4 4 0 0 1-4-4z" fill="#fff" stroke="#24252e" stroke-width="3"/><path d="M30 32l6 4M34 30l6 4M38 29l5 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M2 42h8M0 50h8" stroke="#c9d8ff" stroke-width="3" stroke-linecap="round"/></svg>`
 const BIG_X_ICON = `<svg viewBox="0 0 40 40"><path d="M9 9l22 22M31 9 9 31" stroke="#15151f" stroke-width="13" stroke-linecap="round"/><path d="M9 9l22 22M31 9 9 31" stroke="#fff" stroke-width="7" stroke-linecap="round"/></svg>`
 
 // Golden S-shaped lock of hair with a pink bead (the HUD currency icon).
 const HAIR_ICON = `<svg viewBox="0 0 48 48"><defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe86b"/><stop offset="1" stop-color="#f5a00c"/></linearGradient></defs><path d="M31 3c-10-1-19 4-19 12 0 7 7 10 12 13 4 2 6 5 3 8-3 2-8 2-12-1 1 6 8 9 14 8 8-2 11-8 9-14-2-5-8-8-12-10-4-2-4-5-1-7 3-2 8-1 12 1 1-5-2-9-6-10z" fill="url(#hg)" stroke="#5a3200" stroke-width="2.6" stroke-linejoin="round"/><path d="M17 13c1-3 5-5 9-5M27 31c2 1 2 3 1 5" fill="none" stroke="#fff6c0" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="40" r="4" fill="#ff5fb4" stroke="#5a0a3a" stroke-width="2"/></svg>`
-// White tilted badge with a red cap and a black S (rebirths).
-const REBIRTH_ICON = `<svg viewBox="0 0 64 64"><defs><clipPath id="rbc"><rect x="9" y="9" width="46" height="46" rx="10" transform="rotate(-14 32 32)"/></clipPath></defs><g clip-path="url(#rbc)"><rect width="64" height="64" fill="#fff"/><path d="M0 0H64V20L0 36Z" fill="#ef2f4d"/><path d="M0 36 64 20V25L0 41Z" fill="#b81530"/></g><rect x="9" y="9" width="46" height="46" rx="10" transform="rotate(-14 32 32)" fill="none" stroke="#15152a" stroke-width="4"/><path d="M41 22c-4-4-15-3-15 3 0 7 15 5 15 12 0 6-11 8-16 3" fill="none" stroke="#15152a" stroke-width="6.5" stroke-linecap="round"/></svg>`
+// Red / blue swap arrows (rebirths), the Clean Leaves for Loot icon. An <svg> wrapper so it sizes
+// like the other inline icons.
+const REBIRTH_ICON = `<svg viewBox="0 0 64 64"><image href="${import.meta.env.BASE_URL}UI/rebirth.png" width="64" height="64"/></svg>`
 // Gold trophy (wins).
 const TROPHY_ICON = `<svg viewBox="0 0 64 64"><path d="M16 8h32v16c0 10-7 18-16 18S16 34 16 24z" fill="#ffd21a" stroke="#5a3200" stroke-width="3" stroke-linejoin="round"/><path d="M16 12H8v6c0 7 5 12 10 12M48 12h8v6c0 7-5 12-10 12" fill="none" stroke="#5a3200" stroke-width="3"/><path d="M10 14h6v10c-3-1-6-4-6-8zM54 14h-6v10c3-1 6-4 6-8z" fill="#ffb000"/><path d="M28 42h8v8h-8z" fill="#ffb000" stroke="#5a3200" stroke-width="3"/><rect x="18" y="50" width="28" height="8" rx="2" fill="#ffd21a" stroke="#5a3200" stroke-width="3"/><path d="M24 14c0 6 2 10 5 13" fill="none" stroke="#fff6c0" stroke-width="3" stroke-linecap="round"/></svg>`
 // Green hexagon with a white rounded square (the premium currency).
 const ROBUX_ICON = `<svg viewBox="0 0 64 64"><path d="M32 3 57 17.5v29L32 61 7 46.5v-29z" fill="#2fcf6a" stroke="#0b5a28" stroke-width="3" stroke-linejoin="round"/><rect x="20" y="20" width="24" height="24" rx="4" fill="#fff" transform="rotate(10 32 32)"/><rect x="26" y="26" width="12" height="12" rx="2" fill="#2fcf6a" transform="rotate(10 32 32)"/></svg>`
-// Pink shopping basket.
-const SHOP_ICON = `<svg viewBox="0 0 64 64"><path d="M20 24 30 8M44 24 34 8" stroke="#5a0a3a" stroke-width="4" stroke-linecap="round"/><path d="M8 24h48l-6 30H14z" fill="#ff5fb4" stroke="#5a0a3a" stroke-width="3" stroke-linejoin="round"/><path d="M20 30v18M32 30v18M44 30v18" stroke="#ffb3dc" stroke-width="4" stroke-linecap="round"/><rect x="6" y="20" width="52" height="8" rx="3" fill="#ff8ad0" stroke="#5a0a3a" stroke-width="3"/></svg>`
 // Red backpack with white buckles.
 const BACKPACK_ICON = `<svg viewBox="0 0 64 64"><path d="M24 12a8 8 0 0 1 16 0" fill="none" stroke="#4a0a0a" stroke-width="4" stroke-linecap="round"/><rect x="4" y="22" width="9" height="24" rx="3" fill="#c81e1e" stroke="#4a0a0a" stroke-width="3"/><rect x="51" y="22" width="9" height="24" rx="3" fill="#c81e1e" stroke="#4a0a0a" stroke-width="3"/><rect x="11" y="12" width="42" height="47" rx="11" fill="#f0302a" stroke="#4a0a0a" stroke-width="3"/><path d="M11 26c8 4 34 4 42 0" fill="none" stroke="#4a0a0a" stroke-width="3"/><path d="M15 20c3-4 8-5 12-5" fill="none" stroke="#ff8a7a" stroke-width="3" stroke-linecap="round"/><rect x="17" y="35" width="30" height="18" rx="5" fill="#d42020" stroke="#4a0a0a" stroke-width="3"/><rect x="21" y="29" width="7" height="12" rx="2" fill="#eef0f6" stroke="#4a0a0a" stroke-width="2.5"/><rect x="36" y="29" width="7" height="12" rx="2" fill="#eef0f6" stroke="#4a0a0a" stroke-width="2.5"/></svg>`
 // Blue swirl portal in a violet ring.
 const PORTAL_ICON = `<svg viewBox="0 0 64 64"><ellipse cx="32" cy="32" rx="23" ry="27" fill="#8a4dff" stroke="#2a0a5a" stroke-width="3"/><ellipse cx="32" cy="32" rx="17" ry="21" fill="#4a7bff"/><ellipse cx="32" cy="32" rx="12" ry="15" fill="#6fd8ff"/><path d="M32 13c11 1 15 11 9 17s-17 4-15 12 11 7 11 7M22 22c-3 4-3 9 0 12" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><ellipse cx="32" cy="32" rx="4" ry="5.5" fill="#2a2aa8"/><circle cx="12" cy="18" r="2.5" fill="#ff8aff"/><circle cx="53" cy="47" r="2.5" fill="#ff8aff"/></svg>`
-// Gift box: blue box, yellow ribbon (the Claim button) or red box (the Starter Pack).
+// Gift box (the Starter Pack).
 const giftIcon = (box, dark) => `<svg viewBox="0 0 64 64"><rect x="8" y="26" width="48" height="32" rx="4" fill="${box}" stroke="${dark}" stroke-width="3"/><rect x="4" y="16" width="56" height="14" rx="4" fill="${box}" stroke="${dark}" stroke-width="3"/><rect x="26" y="16" width="12" height="42" fill="#ffd21a" stroke="${dark}" stroke-width="3"/><path d="M32 16c-2-8-14-12-14-4 0 5 8 5 14 4zM32 16c2-8 14-12 14-4 0 5-8 5-14 4z" fill="#ffd21a" stroke="${dark}" stroke-width="3" stroke-linejoin="round"/></svg>`
-const CLAIM_ICON = giftIcon('#3a7bff', '#0a1a5a')
 const STARTER_ICON = giftIcon('#e8243a', '#5a0a14')
 // Golden hair with scissors (the Hair button).
 const HAIRSTYLE_ICON = `<svg viewBox="0 0 64 64"><path d="M30 6c-11 0-18 9-16 19 1 7 7 10 7 17 0 6-5 9-5 13 4 0 11-4 12-11 1-6-4-10-4-16 0-5 4-9 9-9s8 4 7 9c-1 5-6 6-6 11 0 4 4 6 7 6-1-3-2-6 2-10 5-5 7-9 6-15-1-8-9-14-19-14z" fill="#ffd21a" stroke="#5a3200" stroke-width="3" stroke-linejoin="round"/><path d="M22 18c2-5 8-7 13-5" fill="none" stroke="#fff6c0" stroke-width="3" stroke-linecap="round"/><path d="M40 40 56 20M40 24l16 20" stroke="#5a0a3a" stroke-width="6.5" stroke-linecap="round"/><path d="M40 40 56 20M40 24l16 20" stroke="#ffd6f0" stroke-width="3.5" stroke-linecap="round"/><circle cx="36" cy="45" r="5.5" fill="none" stroke="#5a0a3a" stroke-width="7"/><circle cx="36" cy="45" r="5.5" fill="none" stroke="#ff5fc8" stroke-width="4"/><circle cx="36" cy="19" r="5.5" fill="none" stroke="#5a0a3a" stroke-width="7"/><circle cx="36" cy="19" r="5.5" fill="none" stroke="#ff5fc8" stroke-width="4"/></svg>`
@@ -410,18 +591,10 @@ const PHONE_ICON = `<svg viewBox="0 0 32 32"><rect x="8" y="2.5" width="16" heig
 const CROWN_ICON = `<svg viewBox="0 0 48 48"><path d="M6 16l9 9 9-15 9 15 9-9-4 22H10z" fill="#ffc21a" stroke="#7a4a00" stroke-width="2.5" stroke-linejoin="round"/><rect x="10" y="36" width="28" height="6" rx="2" fill="#ffd84a" stroke="#7a4a00" stroke-width="2.5"/><circle cx="24" cy="27" r="3.2" fill="#ff3d5a"/><circle cx="16" cy="30" r="2.4" fill="#3ad0ff"/><circle cx="32" cy="30" r="2.4" fill="#3ad0ff"/><circle cx="6" cy="16" r="2.6" fill="#ffd84a" stroke="#7a4a00" stroke-width="2"/><circle cx="24" cy="9" r="2.6" fill="#ffd84a" stroke="#7a4a00" stroke-width="2"/><circle cx="42" cy="16" r="2.6" fill="#ffd84a" stroke="#7a4a00" stroke-width="2"/></svg>`
 
 // Shared with the Hair Salon UI (salon/salonUi.js), so both overlays draw the same currency and glyphs.
-export { BIG_X_ICON, HAIR_ICON, HAIRSTYLE_ICON, PADLOCK_ICON, REBIRTH_ICON, ROBUX_ICON, TROPHY_ICON, formatNumber }
+export { BIG_X_ICON, HAIR_ICON, HAIRSTYLE_ICON, PADLOCK_ICON, PRESTIGE_ICON, REBIRTH_ICON, ROBUX_ICON, TROPHY_ICON, formatNumber }
 
-// Level packs along the bottom and the two offers on the right (premium
-// currency). Display only in this build: there is no payment flow yet.
-export const LEVEL_PACKS = [
-  { levels: 24, hair: 25000, price: 25, color: 'orange' },
-  { levels: 35, hair: 100000, price: 79, color: 'blue' },
-  { levels: 48, hair: 500000, price: 199, color: 'red' },
-  { levels: 75, hair: 12900000, price: 449, color: 'purple' },
-]
-export const STARTER_PACK = { hair: 25000, wins: 50, price: 20 }
-export const X2_HAIR = { price: 6 }
+// Level packs along the bottom and the two offers on the right. They cost Wins (see the shop offers in state.js).
+const { LEVEL_PACKS, STARTER_PACK, X2_HAIR } = game
 
 const el = (tag, cls, html = '') => {
   const e = document.createElement(tag)
@@ -429,8 +602,9 @@ const el = (tag, cls, html = '') => {
   e.innerHTML = html
   return e
 }
-const price = (n) => `<span class="hud-price stroke">${ROBUX_ICON}${n}</span>`
-const packHtml = (p) => `<span class="ico">${HAIR_ICON}</span><span class="lv stroke">+${p.levels} LV</span><span class="amt stroke">+${formatNumber(p.hair)}</span>${price(p.price)}`
+const price = (n) => `<span class="hud-price stroke">${TROPHY_ICON}${n}</span>`
+const packHtml = (p, i) => `<span class="ico">${HAIR_ICON}</span><span class="lv stroke">+${p.levels} LV</span><span class="amt stroke">+${formatNumber(p.hair)}</span>${price(p.price)}`
+const packButtons = () => LEVEL_PACKS.map((p, i) => `<button class="hud-pack studs ${p.color}" data-pack="${i}">${packHtml(p, i)}</button>`).join('')
 const clockText = (ms) => {
   const s = Math.ceil(ms / 1000)
   const h = Math.floor(s / 3600)
@@ -439,7 +613,7 @@ const clockText = (ms) => {
 }
 
 // Teleport window: `world` is its header name, `stages` [{ level, wins, spot? }]
-// in order (a stage without a spot is "Coming Soon"), `worlds` [{ name, spot? }]
+// in order (a stage without a spot is "Coming Soon"), `worlds` [{ name, spot?, prestige?, art? }]
 // for the Worlds tab, `currentStage()` the index the player stands in (the
 // YOU! row), and `onTeleport(spot)` moves the player. A stage opens at its
 // level and needs `wins` Wins (a requirement, not spent). `onOpenSalon()` opens the Hair Salon (the Hair button).
@@ -469,11 +643,9 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     <div class="hud-cur rebirths"><span class="wrap">${REBIRTH_ICON}</span><span class="n stroke">0</span></div>
     <div class="hud-cur wins"><span class="wrap">${TROPHY_ICON}<button class="plus stroke" title="Get more Wins">+</button></span><span class="n stroke">0</span></div>
     <div class="hud-grid">
-      <button class="hud-tile studs shop">${SHOP_ICON}<span class="lbl stroke">Shop</span><span class="tag">OP!</span></button>
       <button class="hud-tile studs backpack">${BACKPACK_ICON}<span class="lbl stroke">Backpack</span></button>
       <button class="hud-tile studs rebirth">${REBIRTH_ICON}<span class="lbl stroke">REBIRTH!</span><span class="bang">!</span></button>
       <button class="hud-tile studs teleport">${PORTAL_ICON}<span class="lbl stroke">Teleport</span></button>
-      <button class="hud-tile studs claim">${CLAIM_ICON}<span class="lbl stroke">CLAIM!</span><span class="bang">!</span></button>
       <button class="hud-tile studs hair">${HAIRSTYLE_ICON}<span class="lbl stroke">Hair</span></button>
     </div>`)
   root.appendChild(left)
@@ -482,7 +654,7 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
   const bottom = el('div', 'hud-bottom')
   const hair = el('div', 'hud-hair', `<span class="cnt">${HAIR_ICON}<span class="n stroke">0</span><span class="hud-boost stroke"></span></span><span class="rb">${REBIRTH_ICON}<span class="pct stroke">+0%</span></span>`)
   const level = el('div', 'hud-level', `<div class="fill"></div><span class="lv stroke">Level 1</span><span class="xp stroke">0/12</span>`)
-  const packs = el('div', 'hud-packs', LEVEL_PACKS.map((p) => `<button class="hud-pack studs ${p.color}">${packHtml(p)}</button>`).join(''))
+  const packs = el('div', 'hud-packs', packButtons())
   const cableBar = el('div', 'hud-cable', `<div class="fill"></div><span class="len stroke"></span>`) // remaining hair length while the cable is out
   bottom.append(hair, cableBar, level, packs)
   root.appendChild(bottom)
@@ -493,7 +665,7 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       <span class="rewards"><span class="stroke">${HAIR_ICON}+${formatNumber(STARTER_PACK.hair)}</span><span class="stroke">${TROPHY_ICON}+${STARTER_PACK.wins}</span></span>
       ${price(STARTER_PACK.price)}</button>
     <button class="hud-x2"><span class="in">${HAIR_ICON}<span class="stroke">x2 Hair</span></span></button>
-    <span class="hud-only stroke">ONLY ${ROBUX_ICON}${X2_HAIR.price}</span>`)
+    <span class="hud-only stroke">ONLY ${TROPHY_ICON}${X2_HAIR.price}</span>`)
   root.appendChild(right)
 
   // HUD scale --s: fit the reference layout's height, and the bottom stack's width on narrow screens. Touch phones
@@ -565,18 +737,35 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     <p>Run on a <span class="big">treadmill</span> to grow hair. Hair opens the gates in the course behind <span class="big">START</span>. Escape to earn Wins and unlock new hair styles!</p>
     <table class="stats"></table>
     <div class="row"><button class="hud-btn grey stroke menu">Settings</button></div>`)
-  const shopPanel = panel('wide', `<h2 class="stroke">🛒 Shop</h2><div class="hud-shop"></div><p class="hud-empty">Premium purchases are not available in this version.</p>`)
+  const shopPanel = panel('wide', `<h2 class="stroke">🛒 Shop</h2><div class="hud-shop"></div><p class="hud-empty">Spend your Wins on boosts and level packs.</p>`)
   const backpackPanel = panel('wide', `<h2 class="stroke">🎒 Backpack</h2><div class="hud-list"></div>`)
   // Rebirth window: the renderer fills the Before / After columns.
   const rbCol = (side, title) => `<div class="rb-col rb-${side}"><h3 class="stroke">${title}</h3>
     <div class="rb-card blue"><span class="ico">${HAIR_ICON}</span><span class="big stroke"></span></div>
     <div class="rb-card blue"><span class="ico rb">${REBIRTH_ICON}</span><span class="num stroke"></span><span class="sub stroke"></span></div>
     <div class="rb-card gold"><span class="ico">${stageIcon('', true)}</span><span class="num stroke"></span><span class="sub stroke"></span></div></div>`
+  const rbTab = (id, icon, name) => `<button class="rb-tab ${id}" data-tab="${id}">${icon}<span class="stroke">${name}</span><span class="bang stroke">!</span></button>`
+  const prCard = (side, title, color) => `<div class="rb-col pr-${side}"><h3 class="stroke">${title}</h3>
+    <div class="pr-card ${color}"><span class="ico">${PRESTIGE_ICON}</span><span class="big stroke"></span><span class="sub stroke"></span></div></div>`
   const rebirthPanel = el('div', 'rb-win', `
+    <div class="rb-tabs">${rbTab('rebirth', REBIRTH_ICON, 'Rebirth')}${rbTab('prestige', PRESTIGE_ICON, 'Prestige')}${rbTab('upgrades', UPGRADES_ICON, 'Upgrades')}</div>
     <div class="rb-body">
-      <span class="rb-badge">${REBIRTH_ICON}</span>
+      <span class="rb-badge"></span>
       <h2 class="rb-title stroke">Rebirth</h2>
       <button class="rb-x hud-close" title="Close">${BIG_X_ICON}</button>
+      <div class="rb-pane prestige">
+        <div class="pr-cols">${prCard('before', 'Before', 'gold')}<div class="pr-arrow">${CHEVRON_ICON}</div>${prCard('after', 'After', 'pink')}</div>
+        <div class="pr-prizes"></div>
+        <p class="pr-reset stroke">Resets: Hair, Wins, Rebirths, Upgrades, Treadmills, Skins &amp; Trails</p>
+        <p class="pr-keep stroke">Keeps: charms, styles, auras, Shop boosts &amp; your day streak</p>
+        <div class="pr-barwrap"><span class="bico">${REBIRTH_ICON}</span><div class="rb-bar"><div class="fill"></div><span class="lbl stroke"></span><span class="val stroke"></span></div></div>
+        <div class="rb-btns"><button class="rb-btn pr-go"><span class="t stroke">Prestige Now!</span></button></div>
+      </div>
+      <div class="rb-pane upgrades">
+        <div class="up-head"><span class="up-count">${REBIRTH_ICON}<span class="n stroke">0</span></span><span class="up-hint stroke">Upgrades level up as you Rebirth! Prestige resets them.</span></div>
+        <div class="up-grid"></div>
+      </div>
+      <div class="rb-pane rebirth">
       <div class="rb-cols">
         ${rbCol('before', 'Before')}
         <div class="rb-arrows"><span>${CHEVRON_ICON}</span><span>${CHEVRON_ICON}</span><span>${CHEVRON_ICON}</span></div>
@@ -587,18 +776,20 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       <div class="rb-bar"><div class="fill"></div><span class="lbl stroke">Level</span><span class="val stroke"></span></div>
       <div class="rb-btns">
         <button class="rb-btn rb-go"><span class="t stroke">Rebirth</span></button>
-        <button class="rb-btn rb-skip"><span class="t stroke">Skip Rebirth</span><span class="note stroke">NO LEVELS NEEDED!</span>${price(game.SKIP_REBIRTH.price)}</button>
+      </div>
       </div>
     </div>`)
   root.appendChild(rebirthPanel)
-  // 1 reference px -> screen px, with the overhanging badge and close button kept on screen. Portrait uses the
-  // stacked layout (authored ~800 wide, ~1350 tall).
+  let rbTabOpen = 'rebirth'
+  let prestigeSure = false // the Prestige button asks once more before it resets everything
+  // 1 reference px -> screen px, with the overhanging badge, close button and side tabs kept on screen. Portrait
+  // uses the stacked layout (authored ~800 wide, ~1350 tall plus the tab row under it).
   const fitRebirth = () => {
     const w = window.innerWidth
     const h = window.innerHeight
     const portrait = h > w * 1.1
     rebirthPanel.classList.toggle('portrait', portrait)
-    const k = portrait ? Math.min(1, (w - 16) / 860, (h - 16) / 1420) : Math.min(1, (w - 16) / 1600, (h - 16) / 880)
+    const k = portrait ? Math.min(1, (w - 16) / 860, (h - 16) / 1580) : Math.min(1, (w - 16) / 1780, (h - 16) / 880)
     rebirthPanel.style.setProperty('--k', `${k}px`)
   }
   window.addEventListener('resize', fitRebirth)
@@ -610,24 +801,29 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     </div>
     <div class="tp-body">
       <span class="tp-portal">${BIG_PORTAL_ICON}</span>
+      <span class="tp-globe">${GLOBE_ICON}</span>
       <h2 class="tp-title stroke">Teleport</h2>
       <button class="tp-x hud-close" title="Close">${BIG_X_ICON}</button>
       <div class="tp-head"><span class="tp-world stroke"></span><span class="tp-wins">${TROPHY_ICON}<span class="n stroke">0</span></span><span class="tp-lv">${HAIR_ICON}<span class="n stroke">Lv 0</span></span></div>
       <div class="tp-list"></div>
+      <div class="tp-worlds"></div>
     </div>`)
   root.appendChild(teleportPanel)
   let tpTab = 'stages'
-  // Keep the window at the reference proportions: 1px of the 1920-wide layout, shrunk to fit.
-  const fitTeleport = () => teleportPanel.style.setProperty('--k', `${Math.min(1, window.innerWidth / 1400, window.innerHeight / 800)}px`)
+  // Keep the window at the reference proportions: 1px of the 1920-wide layout, shrunk to fit. Portrait's Worlds
+  // tab uses the stacked layout (authored 720 wide plus the side tabs, 1120 tall).
+  const fitTeleport = () => {
+    const w = window.innerWidth
+    const h = window.innerHeight
+    const portrait = h > w * 1.1 && tpTab === 'worlds'
+    teleportPanel.classList.toggle('portrait', portrait)
+    // The Worlds cards fit a shorter box (no stage list below them), so landscape can scale a bit larger there too.
+    const k = portrait ? Math.min(1, (w - 16) / 900, (h - 16) / 1220) : Math.min(1, w / 1400, tpTab === 'worlds' ? (h - 16) / 740 : h / 800)
+    teleportPanel.style.setProperty('--k', `${k}px`)
+  }
   window.addEventListener('resize', fitTeleport)
   fitTeleport()
-  const claimPanel = panel('', `
-    <h2 class="stroke">🎁 Free Gift</h2>
-    <p>A free hair gift every <span class="big">${game.GIFT_COOLDOWN / 3600e3} hours</span>. The more levels you have, the bigger the gift.</p>
-    <p class="status"></p>
-    <div class="row"><button class="hud-btn stroke go">CLAIM!</button></div>`)
-
-  const panels = [eventPanel, helpPanel, shopPanel, backpackPanel, rebirthPanel, teleportPanel, claimPanel]
+  const panels = [eventPanel, helpPanel, shopPanel, backpackPanel, rebirthPanel, teleportPanel]
   const closePanels = () => {
     panels.forEach((x) => x.classList.remove('open'))
     document.body.classList.remove('win-open')
@@ -657,50 +853,149 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     const sw = st.stripes ? `linear-gradient(135deg, ${st.stripes.join(',')})` : `linear-gradient(${st.tip}, ${st.color})`
     return `<div class="hud-row${equipped ? ' on' : ''}"><span class="sw" style="background:${sw}"></span><span class="nm">${st.name}<span class="sub">+${st.bonus} hair per step</span></span>${action}</div>`
   }
+  // Rebirth window panes. The prize row and the upgrade grid rebuild only when what they show changes, so the
+  // pulsing buttons don't restart (and the grid keeps its scroll) on every hair step.
+  const rbPane = (tab) => rebirthPanel.querySelector(`.rb-pane.${tab}`)
+  const renderRebirth = () => {
+    const s = game.state
+    const pane = rbPane('rebirth')
+    const need = game.rebirthLevel()
+    const fill = (side, rebirths, rbSub, lv, lvSub) => {
+      const col = pane.querySelector(`.rb-${side}`)
+      const [r, l] = col.querySelectorAll('.num')
+      const [rs, ls] = col.querySelectorAll('.sub')
+      col.querySelector('.big').textContent = `x${+game.hairMultiplier(rebirths).toFixed(2)} Hair`
+      r.textContent = formatNumber(rebirths)
+      rs.textContent = rbSub
+      l.textContent = `Lv ${lv}`
+      ls.textContent = lvSub
+    }
+    fill('before', s.rebirths, 'REBIRTHS', need, 'TO REBIRTH')
+    fill('after', s.rebirths + 1, '+1 REBIRTH', game.rebirthLevel(s.rebirths + 1), 'NEXT GOAL')
+    pane.querySelector('.rb-bar .fill').style.width = `${Math.min(100, (s.level / need) * 100)}%`
+    pane.querySelector('.rb-bar .val').textContent = `${Math.min(s.level, need)}/${need}`
+    pane.querySelector('.rb-go').classList.toggle('ready', game.canRebirth())
+  }
+  const PRIZE_TILE = {
+    skin: (p) => ({ hd: 'NEW SKIN', icon: colorIcon(game.HAIR_STYLES[p.id]), nm: game.HAIR_STYLES[p.id].name }),
+    charm: (p) => ({ hd: 'CHARM', icon: charmIcon(CHARMS[p.id]), nm: CHARMS[p.id].name }),
+    slot: () => ({ hd: '+1 SLOT', icon: TAB_ICONS.charms(), nm: 'Charm slot' }),
+  }
+  const renderPrestige = () => {
+    const s = game.state
+    const pane = rbPane('prestige')
+    const p = s.prestige
+    const card = (side, n, sub) => {
+      const c = pane.querySelector(`.pr-${side}`)
+      c.querySelector('.big').textContent = `x${game.prestigeMultiplier(n)} Hair`
+      c.querySelector('.sub').textContent = sub
+    }
+    card('before', p, `x${game.prestigeMultiplier(p)} Wins`)
+    card('after', p + 1, `x${game.prestigeMultiplier(p + 1)} Wins FOREVER!`)
+    set('prPrizes', p, () => {
+      const prizes = game.prestigePrizes(p + 1)
+      pane.querySelector('.pr-prizes').innerHTML = `<span class="pr-plbl stroke">Prestige ${p + 1}${prizes.length ? ' prizes:' : `: x${game.prestigeMultiplier(p + 1)} Hair &amp; Wins!`}</span>` +
+        prizes.map((it) => {
+          const t = PRIZE_TILE[it.kind](it)
+          return `<span class="pr-prize ${it.kind}"><span class="hd">${t.hd}</span><span class="ico">${t.icon}</span><span class="nm">${t.nm}</span></span>`
+        }).join('')
+    })
+    const need = game.prestigeRebirths()
+    pane.querySelector('.rb-bar .fill').style.width = `${Math.min(100, (s.rebirths / need) * 100)}%`
+    pane.querySelector('.rb-bar .lbl').textContent = `Rebirths ${formatNumber(s.rebirths)}`
+    pane.querySelector('.rb-bar .val').textContent = `${Math.min(s.rebirths, need)}/${need}`
+    const go = pane.querySelector('.pr-go')
+    const ready = game.canPrestige()
+    if (!ready) prestigeSure = false
+    go.classList.toggle('ready', ready)
+    go.classList.toggle('sure', prestigeSure)
+    go.querySelector('.t').textContent = prestigeSure ? 'Tap again to Prestige!' : 'Prestige Now!'
+  }
+  const UPGRADE_ICONS = { hair: HAIR_ICON, wins: TROPHY_ICON, sleepy: MOON_ICON, zippy: ZIP_ICON, lucky: CLOVER_ICON, feet: SHOE_ICON }
+  // An upgrade's effect at `level` ("+250%", "+8h", "+12").
+  const upgradeText = (up, level) => {
+    const v = level * up.per
+    return up.unit === '%' ? `+${Math.round(v * 100)}%` : `+${+v.toFixed(1)}${up.unit}`
+  }
+  const renderUpgrades = () => {
+    const s = game.state
+    const pane = rbPane('upgrades')
+    pane.querySelector('.up-count .n').textContent = formatNumber(s.rebirths)
+    set('upGrid', `${s.rebirths}|${JSON.stringify(s.upgrades)}`, () => {
+      pane.querySelector('.up-grid').innerHTML = Object.entries(game.UPGRADES).map(([id, up]) => {
+        const lv = game.upgradeLevel(id)
+        const max = lv >= up.max
+        const need = game.upgradeNeed(id)
+        const fx = max ? `${upgradeText(up, lv)} ${up.what}` : `${upgradeText(up, lv)} → <span class="nx">${upgradeText(up, lv + 1)}</span> ${up.what}`
+        const pips = Array.from({ length: up.max }, (_, i) => `<i${i < lv ? ' class="on"' : ''}></i>`).join('')
+        const btn = max
+          ? `<span class="up-go max stroke">MAX!</span>`
+          : `<button class="up-go${game.canUpgrade(id) ? ' ready' : ''}" data-up="${id}" title="Needs ${need} Rebirths">${REBIRTH_ICON}<span class="stroke">${need}</span></button>`
+        return `<div class="up-card ${up.color}"><span class="ico">${UPGRADE_ICONS[id]}</span><span class="nm stroke">${up.name}</span><span class="fx stroke">${fx}</span>
+          <span class="pips">${pips}<span class="cnt stroke">${max ? 'MAX' : `${lv}/${up.max}`}</span></span>${btn}</div>`
+      }).join('')
+    })
+  }
   const renderers = new Map([
     [shopPanel, () => {
       const sp = STARTER_PACK
-      shopPanel.querySelector('.hud-shop').innerHTML =
-        LEVEL_PACKS.map((p) => `<button class="hud-pack studs ${p.color}">${packHtml(p)}</button>`).join('') +
-        `<button class="hud-pack studs red"><span class="lv stroke">Permanent boost</span><span class="amt stroke">x2 Hair</span>${price(X2_HAIR.price)}</button>` +
-        `<button class="hud-pack studs purple full"><span class="lv stroke">Starter Pack</span><span class="amt stroke">+${formatNumber(sp.hair)} Hair · +${sp.wins} Wins</span>${price(sp.price)}</button>`
+      const f = game.state.flags
+      shopPanel.querySelector('.hud-shop').innerHTML = packButtons() +
+        `<button class="hud-pack studs red" data-offer="x2"><span class="lv stroke">Permanent boost</span><span class="amt stroke">x2 Hair</span>${f.x2 ? '<span class="hud-price stroke">OWNED</span>' : price(X2_HAIR.price)}</button>` +
+        `<button class="hud-pack studs purple full" data-offer="starter"><span class="lv stroke">Starter Pack</span><span class="amt stroke">+${formatNumber(sp.hair)} Hair · +${sp.wins} Wins</span>${f.starter ? '<span class="hud-price stroke">CLAIMED</span>' : price(sp.price)}</button>`
     }],
     [backpackPanel, () => {
       const list = backpackPanel.querySelector('.hud-list')
       const styles = Object.entries(game.HAIR_STYLES).filter(([id]) => game.canEquip(id))
-      const treadmills = game.state.owned.filter((k) => k.startsWith('tm:')).map((k) => k.slice(3))
-      list.innerHTML = styles.map(([id, st]) => hairRow(id, st)).join('') +
-        (treadmills.length ? `<div class="hud-row"><span class="sw ico">${HAIRSTYLE_ICON}</span><span class="nm">Treadmills<span class="sub">${treadmills.join(', ')}</span></span></div>` : '')
+      list.innerHTML = styles.map(([id, st]) => hairRow(id, st)).join('')
     }],
     [rebirthPanel, () => {
-      const s = game.state
-      const need = game.rebirthLevel()
-      const fill = (side, rebirths, rbSub, lv, lvSub) => {
-        const col = rebirthPanel.querySelector(`.rb-${side}`)
-        const [r, l] = col.querySelectorAll('.num')
-        const [rs, ls] = col.querySelectorAll('.sub')
-        col.querySelector('.big').textContent = `x${+game.hairMultiplier(rebirths).toFixed(2)} Hair`
-        r.textContent = formatNumber(rebirths)
-        rs.textContent = rbSub
-        l.textContent = `Lv ${lv}`
-        ls.textContent = lvSub
+      const tab = rbTabOpen
+      rebirthPanel.dataset.tab = tab
+      rebirthPanel.querySelectorAll('.rb-tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === tab))
+      rebirthPanel.querySelector('.rb-tab.rebirth').classList.toggle('alert', game.canRebirth())
+      rebirthPanel.querySelector('.rb-tab.prestige').classList.toggle('alert', game.canPrestige())
+      rebirthPanel.querySelector('.rb-tab.upgrades').classList.toggle('alert', game.anyUpgradeReady())
+      rebirthPanel.querySelector('.rb-title').textContent = { rebirth: 'Rebirth', prestige: 'Prestige', upgrades: 'Upgrades' }[tab]
+      const badge = rebirthPanel.querySelector('.rb-badge')
+      if (badge.dataset.tab !== tab) {
+        badge.dataset.tab = tab
+        badge.innerHTML = { rebirth: REBIRTH_ICON, prestige: PRESTIGE_ICON, upgrades: UPGRADES_ICON }[tab]
       }
-      fill('before', s.rebirths, 'REBIRTHS', need, 'TO REBIRTH')
-      fill('after', s.rebirths + 1, '+1 REBIRTH', game.rebirthLevel(s.rebirths + 1), 'NEXT GOAL')
-      rebirthPanel.querySelector('.rb-bar .fill').style.width = `${Math.min(100, (s.level / need) * 100)}%`
-      rebirthPanel.querySelector('.rb-bar .val').textContent = `${Math.min(s.level, need)}/${need}`
-      rebirthPanel.querySelector('.rb-go').classList.toggle('ready', game.canRebirth())
+      if (tab === 'prestige') renderPrestige()
+      else if (tab === 'upgrades') renderUpgrades()
+      else renderRebirth()
     }],
     [teleportPanel, () => {
       const s = game.state
       const here = currentStage()
       teleportPanel.querySelectorAll('.tp-tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === tpTab))
-      teleportPanel.querySelector('.tp-world').textContent = tpTab === 'stages' ? world : 'Worlds'
+      teleportPanel.classList.toggle('worlds', tpTab === 'worlds')
+      fitTeleport()
+      teleportPanel.querySelector('.tp-title').textContent = tpTab === 'stages' ? 'Teleport' : 'Worlds'
+      if (tpTab === 'worlds') {
+        // One card per world: the current one (green), one gated by Prestige (blue, padlocked until met), or unbuilt (grey).
+        teleportPanel.querySelector('.tp-worlds').innerHTML = worlds.map((w, i) => {
+          const need = w.prestige ?? 0
+          const locked = s.prestige < need
+          let cls, status, btn = ''
+          if (i === 0) [cls, status, btn] = ['cur', 'Current world', `<span class="tp-wbtn here stroke">You are here!</span>`]
+          else if (locked) [cls, status, btn] = ['lock', `Prestige ${formatNumber(s.prestige)} / ${formatNumber(need)} needed`, `<button class="tp-wbtn rb stroke" data-act="prestige">${PRESTIGE_ICON}GO PRESTIGE!</button>`]
+          else if (w.spot) [cls, status, btn] = ['lock', 'Unlocked!', `<button class="tp-wbtn go stroke" data-act="go" data-world="${i}">TELEPORT</button>`]
+          else [cls, status] = [need ? 'lock' : 'soon', 'Coming soon!']
+          return `<div class="tp-card ${cls}">
+            <span class="art">${WORLD_ART[w.art] ?? WORLD_ART.mystery}${locked ? `<span class="lock">${PADLOCK_ICON}</span>` : ''}</span>
+            <span class="nm stroke">World ${i + 1}</span>
+            <span class="sub stroke">${w.name}</span>
+            <span class="st stroke">${status}</span>${btn}</div>`
+        }).join('')
+        return
+      }
+      teleportPanel.querySelector('.tp-world').textContent = world
       teleportPanel.querySelector('.tp-wins .n').textContent = formatNumber(s.wins)
       teleportPanel.querySelector('.tp-lv .n').textContent = `Lv ${s.level}`
       const you = `<span class="you stroke">YOU!</span>`
-      teleportPanel.querySelector('.tp-list').innerHTML = tpTab === 'stages'
-        ? stages.map((st, i) => {
+      teleportPanel.querySelector('.tp-list').innerHTML = stages.map((st, i) => {
           const lvOk = FREE_TELEPORT || s.level >= st.level
           let go
           if (!st.wins || (FREE_TELEPORT && st.spot)) go = `<span class="tp-go ready free stroke">FREE!</span>`
@@ -710,20 +1005,7 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
             <span class="nm stroke">Stage ${i + 1}</span>
             <span class="lv${lvOk ? '' : ' no'}">${HAIR_ICON}<span class="stroke">Lv ${st.level}</span></span>
             ${i === here ? you : ''}${go}</button>`
-        }).join('')
-        : worlds.map((w, i) => `<button class="tp-row${i === 0 ? ' here' : ''}" data-world="${i}">
-            <span class="ico">${GLOBE_ICON}${w.spot ? '' : `<span class="lock">${PADLOCK_ICON}</span>`}</span>
-            <span class="nm stroke">World ${i + 1}</span>
-            <span class="lv"><span class="stroke">${w.name}</span></span>
-            ${i === 0 ? you : ''}${w.spot ? `<span class="tp-go ready free stroke">FREE!</span>` : `<span class="tp-go soon stroke">SOON</span>`}</button>`).join('')
-    }],
-    [claimPanel, () => {
-      const wait = game.GIFT_COOLDOWN - (Date.now() - game.state.giftAt)
-      const ready = wait <= 0
-      claimPanel.querySelector('.status').innerHTML = ready
-        ? `Your gift: <span class="big">+${game.giftAmount().toLocaleString()} Hair</span>`
-        : `Next gift in <span class="big">${clockText(wait)}</span>`
-      claimPanel.querySelector('.go').disabled = !ready
+      }).join('')
     }],
   ])
   const render = (p) => renderers.get(p)?.()
@@ -735,19 +1017,40 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
   quest.querySelector('.skip').addEventListener('click', () => onSkipQuest?.())
   helpPanel.querySelector('.menu').addEventListener('click', () => onMenu?.())
   eventPanel.querySelector('.claim').addEventListener('click', () => onClaimBoost?.())
-  for (const sel of ['.hud-tile.shop', '.hud-cur.wins .plus', '.hud-starter', '.hud-x2']) q(sel).addEventListener('click', () => openPanel(shopPanel))
-  packs.addEventListener('click', (e) => e.target.closest('.hud-pack') && openPanel(shopPanel))
-  shopPanel.addEventListener('click', (e) => {
-    if (e.target.closest('.hud-pack')) api.toast('Not available in this version', '#ffb0b0')
-  })
+  // Every offer buys with Wins; the HUD buttons open the Shop, and the Shop's buttons (and the pack bar) buy.
+  const buy = (btn) => {
+    if (!btn) return
+    const { pack, offer } = btn.dataset
+    let ok
+    let msg
+    if (pack != null) (ok = game.buyLevelPack(+pack)), (msg = `+${LEVEL_PACKS[+pack].levels} Levels!`)
+    else if (offer === 'x2') {
+      if (game.state.flags.x2) return api.toast('Already owned', '#ffb0b0')
+      ok = game.buyX2Hair()
+      msg = 'x2 Hair unlocked!'
+    } else if (offer === 'starter') {
+      if (game.state.flags.starter) return api.toast('Already claimed', '#ffb0b0')
+      ok = game.buyStarterPack()
+      msg = 'Starter Pack claimed!'
+    }
+    if (ok) {
+      api.toast(msg, '#b6ff7a')
+      renderOpen()
+    } else api.toast('Not enough Wins!', '#ffb0b0')
+  }
+  for (const sel of ['.hud-cur.wins .plus', '.hud-starter', '.hud-x2']) q(sel).addEventListener('click', () => openPanel(shopPanel))
+  packs.addEventListener('click', (e) => buy(e.target.closest('.hud-pack')))
+  shopPanel.addEventListener('click', (e) => buy(e.target.closest('.hud-pack')))
   q('.hud-tile.backpack').addEventListener('click', () => openPanel(backpackPanel))
   q('.hud-tile.hair').addEventListener('click', () => {
     closePanels()
     onOpenSalon?.()
   })
-  q('.hud-tile.rebirth').addEventListener('click', () => openPanel(rebirthPanel))
+  q('.hud-tile.rebirth').addEventListener('click', () => {
+    prestigeSure = false
+    openPanel(rebirthPanel)
+  })
   q('.hud-tile.teleport').addEventListener('click', () => openPanel(teleportPanel))
-  q('.hud-tile.claim').addEventListener('click', () => openPanel(claimPanel))
   for (const sel of ['.hud-top .logo', '.hud-top .menu']) q(sel).addEventListener('click', () => onMenu?.())
   q('.hud-top .phone').addEventListener('click', () => openPanel(helpPanel))
   q('.hud-top .music').addEventListener('click', () => api.toast('No music in this version', '#ffb0b0'))
@@ -764,12 +1067,26 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     if (game.rebirth()) closePanels()
     else api.toast(`Reach Level ${game.rebirthLevel()}!`, '#ffb0b0')
   })
-  rebirthPanel.querySelector('.rb-skip').addEventListener('click', () => api.toast('Not available in this version', '#ffb0b0'))
-  claimPanel.querySelector('.go').addEventListener('click', () => {
-    const n = game.claimGift()
-    if (n > 0) {
-      api.toast(`+${n.toLocaleString()} Hair!`, '#b6ff7a')
-      render(claimPanel)
+  rebirthPanel.addEventListener('click', (e) => {
+    const tab = e.target.closest('.rb-tab')?.dataset.tab
+    if (tab) {
+      rbTabOpen = tab
+      prestigeSure = false
+      return render(rebirthPanel)
+    }
+    const up = e.target.closest('[data-up]')?.dataset.up
+    if (up) {
+      if (!game.upgrade(up)) api.toast(`Need ${game.upgradeNeed(up)} Rebirths!`, '#ffb0b0')
+      return
+    }
+    if (e.target.closest('.pr-go')) {
+      if (!game.canPrestige()) return api.toast(`Need ${game.prestigeRebirths()} Rebirths!`, '#ffb0b0')
+      if (!prestigeSure) {
+        prestigeSure = true
+        return render(rebirthPanel)
+      }
+      prestigeSure = false
+      if (game.prestige()) closePanels()
     }
   })
   teleportPanel.addEventListener('click', (e) => {
@@ -784,14 +1101,19 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       onTeleport?.(spot)
       api.toast(name, '#5fe0ff')
     }
+    const act = e.target.closest('[data-act]')
+    if (act?.dataset.act === 'prestige') {
+      // Straight to the Rebirth window's Prestige tab.
+      rbTabOpen = 'prestige'
+      prestigeSure = false
+      return openPanel(rebirthPanel)
+    }
+    if (act?.dataset.act === 'go') {
+      const w = worlds[act.dataset.world]
+      return go(w.spot, w.name)
+    }
     const row = e.target.closest('.tp-row')
     if (!row) return
-    if (row.dataset.world != null) {
-      const w = worlds[row.dataset.world]
-      if (w.spot) go(w.spot, w.name)
-      else api.toast('Coming soon!', '#ffb0b0')
-      return
-    }
     const i = Number(row.dataset.stage)
     const st = stages[i]
     const s = game.state
@@ -813,14 +1135,6 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
     fn(value)
   }
 
-  // Time-driven bits: the gift's "!" badge and its countdown.
-  const tick = () => {
-    const ready = game.giftReady()
-    set('giftReady', ready, () => q('.hud-tile.claim').classList.toggle('alert', ready))
-    if (claimPanel.classList.contains('open')) render(claimPanel)
-  }
-  setInterval(tick, 1000)
-
   Object.assign(api, {
     openEvent: () => openPanel(eventPanel),
     // The Hair Salon covers the screen: close any window and hide everything but the top bar and toasts.
@@ -833,8 +1147,7 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       set('rebirths', s.rebirths, () => (q('.hud-cur.rebirths .n').textContent = formatNumber(s.rebirths)))
       set('wins', s.wins, () => (q('.hud-cur.wins .n').textContent = formatNumber(s.wins)))
       set('rbPct', s.rebirths, () => (hair.querySelector('.pct').textContent = `+${Math.round(s.rebirths * game.REBIRTH_BONUS * 100)}%`))
-      set('canRebirth', game.canRebirth(), (ok) => q('.hud-tile.rebirth').classList.toggle('alert', ok))
-      tick()
+      set('canRebirth', game.canRebirth() || game.canPrestige() || game.anyUpgradeReady(), (ok) => q('.hud-tile.rebirth').classList.toggle('alert', ok))
       renderOpen()
     },
     setQuest(index, total, text) {
@@ -905,8 +1218,9 @@ export function createHud({ onMenu, onClaimBoost, onSkipQuest, onTeleport, onOpe
       setTimeout(() => t.remove(), 2600)
     },
     popup(text, x, y) {
+      playSfx('hairGain')
       const p = el('div', 'hud-pop stroke')
-      p.textContent = text
+      p.innerHTML = `<span class="hud-pop-ico">${HAIR_ICON}</span><span>${text}</span>`
       p.style.left = `${x + (Math.random() - 0.5) * 60}px`
       p.style.top = `${y}px`
       root.appendChild(p)

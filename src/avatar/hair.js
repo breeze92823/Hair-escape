@@ -21,7 +21,7 @@
 // (strand count, braid twist, bubbles, waves, thickness) and adds pieces on the head
 // (ponytail, buns, bunches, bow).
 import { BoxGeometry, BufferAttribute, BufferGeometry, Group, Mesh, MeshStandardMaterial, SphereGeometry, TorusGeometry, Vector3 } from 'three'
-import { CHARACTER_COLORS, HAIR, MATERIAL_PBR, clamp } from '../config.js'
+import { CHARACTER_COLORS, GRAPPLE, HAIR, MATERIAL_PBR, clamp } from '../config.js'
 import { CUTS, DEFAULT_CUT } from '../game/cosmetics.js'
 
 // The single source of truth for the hair length (HAIR.startLength at spawn).
@@ -33,6 +33,7 @@ export const hairState = {
   trail: 0,
   grownLength: HAIR.startLength,
   grownTrail: 0,
+  grownHair: 0, // the raw hair stat; the cable's reach keeps growing with it after length and trail hit their caps
   cut: CUTS[DEFAULT_CUT],
   cutVersion: 0, // bumps on every cut change, so hair instances re-style once
 }
@@ -53,7 +54,8 @@ export function setTrailLength(metres) {
 }
 
 // The full grown hair (length points, trail metres), whatever the Length slider shows.
-export function setGrownLength(length, trailMetres) {
+export function setGrownLength(length, trailMetres, hair = 0) {
+  hairState.grownHair = Math.max(0, Number(hair) || 0)
   hairState.grownLength = clamp(Number(length) || HAIR.minLength, HAIR.minLength, HAIR.maxLength)
   hairState.grownTrail = clamp(Number(trailMetres) || 0, 0, TRAIL.maxLength)
 }
@@ -291,7 +293,7 @@ const ROPE = {
   radial: 27, // verts per ring (3 per strand at the classic 9 strands)
   clearance: 0.04, // m the floor part floats above the ground
 }
-const MAX_POINTS = POOL + 1 + TRAIL_MAX + 1 // hang (root + joints) + trail
+const MAX_POINTS = Math.max(POOL + 1 + TRAIL_MAX + 1, GRAPPLE.ropePoints) // hang (root + joints) + trail, or the cable's path
 const CAP = 3 // extra rings that round off each end
 const TAU = Math.PI * 2
 
