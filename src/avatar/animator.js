@@ -52,7 +52,7 @@ class PlayerAnimator {
     this.root.position.y = 0
   }
 
-  // input: { grounded, speed, verticalVelocity, turn (-1..1) }
+  // input: { grounded, speed, verticalVelocity, turn (-1..1), hanging, hangPitch (cable elevation, rad) }
   update(dt, input) {
     if (!(dt > 0)) return
     this.stateTime += dt
@@ -64,6 +64,11 @@ class PlayerAnimator {
   }
 
   resolveState(dt, input) {
+    if (input.hanging) {
+      this.airTime = ANIM.airborneDelay // letting go mid-air drops straight into the air pose
+      this.setState('hang', ANIM.transitions.toHang)
+      return
+    }
     if (!input.grounded) {
       // Ignore the few frames of a step down a ledge; only a real drop is airborne.
       this.airTime += dt
@@ -115,6 +120,18 @@ class PlayerAnimator {
         t.applyDefinition(ANIM.airborne.fall)
         this.scratch.applyDefinition(ANIM.airborne.rise)
         t.lerpBetween(t, this.scratch, clamp(0.5 + rising * 0.5, 0, 1))
+        t.bobY = 0
+        break
+      }
+      case 'hang': {
+        // Arms reach up the cable: level cable = arms straight ahead, steeper = more overhead.
+        t.applyDefinition(ANIM.hang.pose)
+        const reach = -clamp(input.hangPitch ?? 0, -0.6, 1.4)
+        t.add('ArmL1', reach)
+        t.add('ArmR1', reach)
+        const sway = Math.sin(this.stateTime * ANIM.hang.swayFrequency * TAU) * ANIM.hang.swayAmount
+        t.add('LegL1', sway)
+        t.add('LegR1', -sway)
         t.bobY = 0
         break
       }

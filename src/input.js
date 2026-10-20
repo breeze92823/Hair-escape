@@ -1,10 +1,13 @@
 // WASD/arrows move (camera-relative, consumed by player.js), right-drag look +
-// wheel zoom (consumed by camera.js), edge-triggered jump (cleared by player.js).
+// wheel zoom (consumed by camera.js), edge-triggered jump on Shift (cleared by
+// player.js) and hair cable on Space (cleared by main.js).
 export const inputState = {
   move: { x: 0, z: 0 }, // x = strafe (+ right), z = forward (+ forward)
   look: { dx: 0, dy: 0 }, // raw pixels since the camera last read them
   zoom: 0, // wheel notches since the camera last read them (+ = away)
   jump: false,
+  grapple: false, // Space: shoot the hair cable / let go of it
+  stopTip: false, // left click: pin the flying tip where it is, even in mid-air
   interact: false, // E: edge-triggered, cleared by the interaction system in main.js
 }
 
@@ -20,8 +23,9 @@ let armed = false
 
 const locked = () => !!canvas && document.pointerLockElement === canvas
 // Pointer lock can reject (sandboxed frame, post-Escape cooldown); that is not a fault.
+// The Hair Salon (body.salon-open) keeps the cursor: its 3D view is dragged and its menus clicked.
 function requestLock() {
-  if (!canvas || locked()) return
+  if (!canvas || locked() || document.body.classList.contains('salon-open')) return
   const r = canvas.requestPointerLock?.()
   if (r instanceof Promise) r.catch(() => {})
 }
@@ -36,6 +40,9 @@ function recomputeMove() {
   inputState.move.x = x
   inputState.move.z = z
 }
+
+// Re-read the held keys (main.js zeroes `move` while the hair tip flies, so keys still down need restoring).
+export const refreshMove = recomputeMove
 
 export function install(showMenu, canvasEl) {
   canvas = canvasEl
@@ -56,7 +63,11 @@ export function install(showMenu, canvasEl) {
       requestLock()
     }
     held.add(e.code)
-    if (e.code === 'Space') inputState.jump = true
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') inputState.jump = true
+    if (e.code === 'Space') {
+      e.preventDefault() // no page scroll / button press
+      inputState.grapple = true
+    }
     if (e.code === 'KeyE') inputState.interact = true
     recomputeMove()
   })
@@ -68,6 +79,7 @@ export function install(showMenu, canvasEl) {
     if (e.pointerType === 'touch') return // touch.js owns touch (stick, look, buttons)
     const onWorld = e.target.tagName === 'CANVAS'
     if (e.button === 2 && !lockEverGranted) orbiting = true
+    if (e.button === 0) inputState.stopTip = true
     if (e.button === 0 && onWorld) {
       // A click on the world takes the cursor (resuming play after Escape).
       armed = true
@@ -100,6 +112,7 @@ export function install(showMenu, canvasEl) {
     held.clear()
     orbiting = false
     inputState.jump = false
+    inputState.grapple = false
     recomputeMove()
   })
 }

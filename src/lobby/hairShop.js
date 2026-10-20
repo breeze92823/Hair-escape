@@ -228,7 +228,7 @@ export function buildHairShop(parent, addCollider, spots) {
         const lines = [{ text: `+${style.bonus} / Hair`, size: 0.7, fill: '#ffffff' }]
         if (state.equipped === id) lines.push({ text: 'EQUIPPED', size: 0.7, fill: ['#fff27a', '#ffb000'] })
         else if (canEquip(id)) lines.push({ text: 'Press E to Equip', size: 0.6, fill: ['#b6ff7a', '#33d11c'] })
-        else if (canAcquire(id)) lines.push({ text: style.cost != null ? 'Press E to Buy' : 'Press E to Claim', size: 0.6, fill: ['#b6ff7a', '#33d11c'] })
+        else if (canAcquire(id)) lines.push({ text: `🏆 ${style.price} · Press E to Buy`, size: 0.6, fill: ['#b6ff7a', '#33d11c'] })
         else lines.push({ text: requirementText(id), size: 0.7, fill: ['#fff27a', '#ffb000'] })
         info.set(lines)
       },

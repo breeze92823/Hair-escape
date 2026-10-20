@@ -3,13 +3,13 @@
 // START portal, flanked by the TOP WINS / TOP HAIR boards on the left and
 // TOP REBIRTHS / TOP PRESTIGE on the right. The west side is red bleachers
 // with the hair styles on display (the HAIR SHOP); the east wall is the
-// TREADMILLS row (x1 to x100), with the sleeping AFK guy on a ledge above and
-// the Lucky Spin tower in the corner. Bunting and clouds overhead.
+// TREADMILLS row (FREE x1 by the AFK ledge, then one tier per rebirth milestone
+// down to x500 at the south end), with bunting and clouds overhead.
 //
 // Axes: +X east (right), -Z north (toward the portal). Units are metres.
 import {
-  AdditiveBlending, BoxGeometry, CanvasTexture, CircleGeometry, ConeGeometry, CylinderGeometry, DoubleSide, Group, Mesh,
-  MeshBasicMaterial, MeshStandardMaterial, OctahedronGeometry, PlaneGeometry, Shape, ShapeGeometry,
+  AdditiveBlending, BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, DoubleSide, Group, Mesh,
+  MeshBasicMaterial, PlaneGeometry, Shape, ShapeGeometry,
   SphereGeometry, SRGBColorSpace, TorusGeometry, ExtrudeGeometry,
 } from 'three'
 import { floorMaterial, makeCanvas, onFontReady, outlinedText, studMaterial } from './paint.js'
@@ -18,14 +18,13 @@ import { buildLeaderboards } from './leaderboards.js'
 import { buildTreadmill } from './treadmill.js'
 import { buildHairShop, showNearestInfo } from './hairShop.js'
 import {
-  BUNDLE, REBIRTH_LEVEL, canAcquire, canEquip, canRebirth, claimGift, equip, giftAmount, giftReady, GIFT_COOLDOWN, HAIR_STYLES,
-  SPIN_COOLDOWN, SPIN_PRIZES, buy, owns, rebirth, requirementText, spin, spinReady, state as progress,
+  rebirthLevel, canAcquire, canEquip, canRebirth, equip, HAIR_STYLES,
+  rebirth, requirementText, state as progress, styleReq,
 } from '../game/state.js'
-import { formatNumber } from './leaderboards.js'
-import { C, add, bundleBoard, clock, slab, std } from './build.js'
+import { C, add, slab, std } from './build.js'
 import { buildSouth } from './south.js'
 
-// The hall runs from the START portal (north) to the CHESTS wall (south).
+// The hall runs from the START portal (north) to the south wall.
 export const ROOM = { minX: -26, maxX: 26, minZ: -34, maxZ: 50, wallH: 13.5, wallT: 1.2 }
 // ---------------------------------------------------------------------------
 function buildShell(g, addCollider) {
@@ -81,7 +80,7 @@ function buildShell(g, addCollider) {
   const capMat = std(C.yellow, { roughness: 0.4 })
   const pillarSpots = []
   for (const z of [minZ + 0.6, -20, 20, 32, maxZ - 0.6]) pillarSpots.push([minX + 0.6, z]) // west: frames the HAIR SHOP wall
-  for (const z of [minZ + 0.6, -0.9, 37, maxZ - 0.6]) pillarSpots.push([maxX - 0.6, z]) // east: splits the treadmill row
+  for (const z of [minZ + 0.6, -0.9, 32, maxZ - 0.6]) pillarSpots.push([maxX - 0.6, z]) // east: splits the treadmill row in two and closes its south end
   for (const x of [-21, 21]) pillarSpots.push([x, minZ + 0.6])
   for (const [x, z] of pillarSpots) {
     slab(g, pillarMat, x, z, 1.8, 1.8, 0, wallH + 0.2)
@@ -215,8 +214,6 @@ function buildPortal(g, addCollider) {
 
   label(g, [{ text: 'START', size: 1, fill: ['#d6ff6a', '#45e01e'], stroke: '#14400c' }], [0, H + post + 2.6, fz], { unit: 1.5 })
 
-  shimmer.visible = false
-
   return {
     shimmer,
     // Walking out through the doorway counts as entering the course.
@@ -249,50 +246,6 @@ function buildBleachers(g, addCollider) {
     slab(g, yellow, s.x1 + 0.02, zc, 0.06, d, s.h - 0.2, s.h - 0.06) // stripe on the riser
   }
 }
-
-// ---------------------------------------------------------------------------
-// The white gift box with pink trim and a floating pink gem (free hair every few hours).
-function buildGift(g, addCollider) {
-  const x = -7.6
-  const z = -24.5
-  const s = 2.2
-  const root = new Group()
-  root.position.set(x, 0, z)
-  g.add(root)
-  add(root, new BoxGeometry(s, s, s), std('#ffffff', { roughness: 0.35 }), [0, s / 2, 0])
-  const pink = std('#ff3fb0', { roughness: 0.35, emissive: '#ff1f9a', emissiveIntensity: 0.25 })
-  for (const sx of [-1, 1]) {
-    for (const sz of [-1, 1]) add(root, new BoxGeometry(0.2, s + 0.02, 0.2), pink, [sx * (s / 2), s / 2, sz * (s / 2)])
-    add(root, new BoxGeometry(0.2, 0.2, s + 0.2), pink, [sx * (s / 2), s, 0])
-    add(root, new BoxGeometry(s + 0.2, 0.2, 0.2), pink, [0, s, sx * (s / 2)])
-  }
-  // Ribbon across the faces.
-  add(root, new BoxGeometry(s + 0.04, s + 0.04, 0.35), pink, [0, s / 2, 0])
-  add(root, new BoxGeometry(0.35, s + 0.04, s + 0.04), pink, [0, s / 2, 0])
-  const gem = add(root, new OctahedronGeometry(0.55), std('#ff4fd0', { roughness: 0.15, metalness: 0.3, emissive: '#ff2fb8', emissiveIntensity: 0.5 }), [0, s + 1, 0])
-  gem.scale.y = 1.35
-  addCollider(x, z, s + 0.2, s + 0.2, s + 0.1)
-  const sign = label(g, [], [x, s + 2.6, z], { unit: 0.9 })
-
-  return {
-    update(dt, time) {
-      gem.rotation.y += dt * 1.8
-      gem.position.y = s + 1 + Math.sin(time * 2.2) * 0.15
-      if (giftReady()) sign.set([{ text: 'FREE GIFT!', size: 0.8, fill: ['#ffd6f4', '#ff3fb0'], stroke: '#5a0a3a' }])
-      else {
-        const left = Math.max(0, GIFT_COOLDOWN - (Date.now() - progress.giftAt))
-        sign.set([{ text: 'FREE GIFT', size: 0.7, fill: '#ffffff', stroke: '#5a0a3a' }, { text: clock(left), size: 0.6, fill: '#ffd6f4' }])
-      }
-    },
-    interact: {
-      position: { x, y: 1, z },
-      radius: 3.4,
-      prompt: () => (giftReady() ? [`Claim Free Gift (+${giftAmount()} Hair)`, true] : ['Gift is recharging...', false]),
-      action: () => claimGift(),
-    },
-  }
-}
-
 
 // ---------------------------------------------------------------------------
 // Big yellow bobbing arrow (points down at the FREE treadmill).
@@ -441,94 +394,6 @@ function buildTreadmillSign(g) {
 }
 
 // ---------------------------------------------------------------------------
-// Lucky Spin: a rainbow-striped tower in the south-east corner with a prize
-// wheel facing the room. One free spin an hour (E); the wheel spins down onto
-// the prize it rolled.
-function buildLuckySpin(g, addCollider) {
-  const x = 23
-  const z = 26.5
-  const stripes = ['#ff3b3b', '#ff9a1a', '#ffd21a', '#45e01e', '#2fb8ff', '#7a3cff', '#ff5fc0']
-  stripes.forEach((col, i) => slab(g, studMaterial(col, 5, 1), x, z, 5, 5, i * 1.1, (i + 1) * 1.1))
-  slab(g, std('#ffffff', { roughness: 0.4 }), x, z, 5.6, 5.6, stripes.length * 1.1, stripes.length * 1.1 + 0.5)
-  addCollider(x, z, 5, 5, stripes.length * 1.1 + 0.5)
-  // Gold bulbs along the top edge.
-  for (let i = 0; i < 8; i++) {
-    const b = add(g, new SphereGeometry(0.18, 10, 8), std('#fff27a', { emissive: '#ffcc00', emissiveIntensity: 0.8 }), [x - 2.7, stripes.length * 1.1 + 0.7, z - 2.4 + i * 0.68])
-    b.castShadow = false
-  }
-
-  // The wheel: a canvas disc of prize segments, on the west face.
-  const wc = makeCanvas(512, 512)
-  const wtex = new CanvasTexture(wc)
-  wtex.colorSpace = SRGBColorSpace
-  const paintWheel = () => {
-    const ctx = wc.getContext('2d')
-    const n = SPIN_PRIZES.length
-    for (let i = 0; i < n; i++) {
-      ctx.beginPath()
-      ctx.moveTo(256, 256)
-      ctx.arc(256, 256, 250, (i / n) * Math.PI * 2, ((i + 1) / n) * Math.PI * 2)
-      ctx.fillStyle = stripes[i % stripes.length]
-      ctx.fill()
-      ctx.save()
-      ctx.translate(256, 256)
-      ctx.rotate(((i + 0.5) / n) * Math.PI * 2)
-      outlinedText(ctx, `${SPIN_PRIZES[i]}x`, 160, 0, 44, { fill: '#ffffff', stroke: '#1b1b2a', strokeRatio: 0.18 })
-      ctx.restore()
-    }
-    ctx.lineWidth = 12
-    ctx.strokeStyle = '#ffffff'
-    ctx.beginPath()
-    ctx.arc(256, 256, 248, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.fillStyle = '#ffffff'
-    ctx.beginPath()
-    ctx.arc(256, 256, 40, 0, Math.PI * 2)
-    ctx.fill()
-    wtex.needsUpdate = true
-  }
-  paintWheel()
-  onFontReady(paintWheel)
-  const wheel = add(g, new CircleGeometry(2.1, 48), new MeshBasicMaterial({ map: wtex, toneMapped: false }), [x - 2.53, 4.6, z], { rot: [0, -Math.PI / 2, 0], cast: false })
-  add(g, new TorusGeometry(2.15, 0.14, 10, 48), std('#ffd21a', { metalness: 0.3, roughness: 0.3 }), [x - 2.55, 4.6, z], { rot: [0, Math.PI / 2, 0] })
-  // Pointer at the top of the wheel.
-  add(g, new ConeGeometry(0.3, 0.7, 4), std('#ffffff'), [x - 2.7, 6.95, z], { rot: [Math.PI, 0, 0] })
-  const sign = label(g, [], [x - 2.6, 9.8, z], { unit: 1.2 })
-
-  // Spin animation: ease the wheel to land the rolled segment under the pointer.
-  const anim = { from: 0, to: 0, t: 1 }
-  const n = SPIN_PRIZES.length
-  return {
-    update(dt, time) {
-      if (anim.t < 1) {
-        anim.t = Math.min(1, anim.t + dt / 4)
-        const e = 1 - Math.pow(1 - anim.t, 3)
-        wheel.rotation.z = anim.from + (anim.to - anim.from) * e
-      }
-      sign.set(spinReady()
-        ? [{ text: 'LUCKY SPIN', size: 0.9, fill: ['#fff27a', '#ff5fc0'], stroke: '#3a0a3a' }, { text: 'FREE SPIN READY!', size: 0.45, fill: '#ffffff', bg: '#33d11c', border: '#0f4a0a' }]
-        : [{ text: 'LUCKY SPIN', size: 0.9, fill: ['#fff27a', '#ff5fc0'], stroke: '#3a0a3a' }, { text: `Next spin ${clock(SPIN_COOLDOWN - (Date.now() - progress.spinAt))}`, size: 0.45, fill: '#ffffff', bg: '#2a2b45' }])
-    },
-    interact: {
-      position: { x: x - 3.5, y: 1, z },
-      radius: 3.5,
-      prompt: () => (spinReady() ? ['Spin the Lucky Wheel (free!)', true] : ['The wheel is recharging...', false]),
-      action: () => {
-        const index = spin()
-        if (index < 0) return
-        // Canvas angles run clockwise from 3 o'clock; a +rotation.z turns the disc
-        // counter-clockwise, carrying segment centre c to c - rot. The pointer is at
-        // 12 o'clock (-90 deg), so land on rot = c + 90 deg, plus five full turns.
-        const target = ((index + 0.5) / n) * Math.PI * 2 + Math.PI / 2
-        anim.from = wheel.rotation.z % (Math.PI * 2)
-        anim.to = target + Math.PI * 2 * 5
-        anim.t = 0
-      },
-    },
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Rebirth altar on the south side (behind spawn): purple pedestal and a spinning halo.
 function buildRebirth(g, addCollider) {
   const x = 11.5
@@ -548,13 +413,13 @@ function buildRebirth(g, addCollider) {
         { text: 'REBIRTH', size: 0.9, fill: ['#f2dcff', '#a35bff'], stroke: '#2a0a5a' },
         canRebirth()
           ? { text: 'Press E: +50% Hair forever', size: 0.5, fill: ['#b6ff7a', '#33d11c'] }
-          : { text: `Reach Level ${REBIRTH_LEVEL} (you: ${state.level})`, size: 0.5, fill: '#ffffff' },
+          : { text: `Reach Level ${rebirthLevel()} (you: ${state.level})`, size: 0.5, fill: '#ffffff' },
       ])
     },
     interact: {
       position: { x, y: 1, z },
       radius: 4,
-      prompt: () => (canRebirth() ? ['Rebirth (resets hair & level, +50% hair)', true] : [`Rebirth needs Level ${REBIRTH_LEVEL}`, false]),
+      prompt: () => (canRebirth() ? ['Rebirth (resets hair & level, +50% hair)', true] : [`Rebirth needs Level ${rebirthLevel()}`, false]),
       action: () => rebirth(),
     },
   }
@@ -626,52 +491,8 @@ function buildShopSign(g) {
   add(g, new PlaneGeometry(16, 3), new MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false }), [ROOM.minX + 0.3, 8.6, 0], { rot: [0, Math.PI / 2, 0], cast: false })
 }
 
-// South-west corner: a raised white studded stage for the limited hair (Twin
-// Braids drop, Twin Tails, Curly) and the PRINCESS BUNDLE billboard.
-const CORNER = { x0: ROOM.minX, x1: -14.5, z0: 20, z1: 30.4, h: 2.2 }
-function buildLimitedCorner(g, addCollider) {
-  const { x0, x1, z0, z1, h } = CORNER
-  const w = x1 - x0
-  const d = z1 - z0
-  const xc = (x0 + x1) / 2
-  const zc = (z0 + z1) / 2
-  slab(g, studMaterial('#f4f2ff', Math.max(w, d), h), xc, zc, w, d, 0, h)
-  addCollider(xc, zc, w, d, h)
-  const pink = std('#ff6ad5', { roughness: 0.4, emissive: '#ff3fc0', emissiveIntensity: 0.2 })
-  const purple = std('#7a3cff', { roughness: 0.4 })
-  slab(g, pink, x1 - 0.15, zc, 0.3, d, h, h + 0.12)
-  slab(g, pink, xc, z0 + 0.15, w, 0.3, h, h + 0.12)
-  slab(g, purple, x1 + 0.03, zc, 0.06, d, 0.1, 0.5)
-  slab(g, purple, xc, z0 - 0.03, w, 0.06, 0.1, 0.5)
-  // Steps up from the floor on the east face (0.55 m risers, like the bleachers).
-  const stepMat = studMaterial('#f4f2ff', 3, 1)
-  for (const [dx, top] of [[1.5, 0.55], [1.0, 1.1], [0.5, 1.65]]) {
-    slab(g, stepMat, x1 + dx / 2, 24, dx, 3, 0, top)
-    addCollider(x1 + dx / 2, 24, dx, 3, top)
-  }
-
-  // The bundle display: a yellow gift block and white pedestal beside the hair.
-  slab(g, studMaterial('#ffd21a', 1.6, 1.6), -23.5, 23.6, 1.6, 1.6, h, h + 1.6)
-  addCollider(-23.5, 23.6, 1.6, 1.6, h + 1.6)
-  slab(g, pink, -23.5, 23.6, 1.62, 1.62, h + 0.65, h + 0.95)
-  add(g, new CylinderGeometry(0.7, 0.8, 1.0, 20), std('#ffffff', { roughness: 0.35 }), [-24, h + 0.5, 21.6])
-  addCollider(-24, 21.6, 1.5, 1.5, h + 1)
-
-  // Billboard: LIMITED / CELESTIAL PRINCESS BUNDLE / stock / bonus + price.
-  const board = bundleBoard(g, BUNDLE, HAIR_STYLES.princess.bonus, [-21.5, h + 7.6, 26.5])
-  const sparkle = label(g, [{ text: '✦', size: 1, fill: ['#fff6b0', '#ffc400'], stroke: '#7a4a00' }], [-24.6, h + 9.7, 26.5], { unit: 1.1 })
-  return {
-    update(time) {
-      board()
-      sparkle.sprite.material.rotation = time * 0.8
-      sparkle.sprite.scale.setScalar(1.1 + Math.sin(time * 4) * 0.15)
-    },
-  }
-}
-
 // ---------------------------------------------------------------------------
-// opts.onEvent: the south arch opens the EVENT panel.
-export function buildLobby(scene, addCollider, { onEvent } = {}) {
+export function buildLobby(scene, addCollider) {
   const g = new Group()
   g.name = 'lobby'
   scene.add(g)
@@ -682,54 +503,51 @@ export function buildLobby(scene, addCollider, { onEvent } = {}) {
   const boards = buildLeaderboards(g, addCollider, ROOM.minZ)
   buildBleachers(g, addCollider)
   // Front row on the middle tier, back row staggered between them on the top
-  // tier, Golden (the starter) alone on the bottom tier by the portal, and the
-  // limited styles on the white corner stage.
+  // tier, and Golden (the starter) alone on the bottom tier by the portal.
   const FRONT = { x: -17.25, y: STEPS[1].h, scale: 0.78 }
   const BACK = { x: -22.75, y: STEPS[2].h, scale: 0.66 }
-  const south = buildSouth(g, addCollider, ROOM, { onEvent })
+  const south = buildSouth(g, addCollider, ROOM)
+  // Seven along the front tier, Golden (the starter) at the north end by the
+  // leaderboards and the bonus rising southward; six on the tier behind, each
+  // standing in the gap between two front displays. The south corner has the rest.
+  const FRONT_ROW = ['golden', 'blueberry', 'slime', 'emerald', 'crystal', 'ruby', 'gummy']
+  const BACK_ROW = ['orange', 'grape', 'ocean', 'void', 'prestigeGold', 'prestigeDiamond']
+  const SHOP_Z0 = -23 // m, Golden's display
+  const SHOP_Z1 = 17 // m, Gummy's display
+  const SHOP_DZ = (SHOP_Z1 - SHOP_Z0) / (FRONT_ROW.length - 1) // m between front displays
   const shop = buildHairShop(g, addCollider, [
     ...south.shopSpots,
-    { id: 'golden', x: -12.75, y: STEPS[0].h, z: -23 },
-    { id: 'blueberry', ...FRONT, z: -16 },
-    { id: 'slime', ...FRONT, z: -9.5 },
-    { id: 'emerald', ...FRONT, z: -3 },
-    { id: 'crystal', ...FRONT, z: 3.5 },
-    { id: 'ruby', ...FRONT, z: 10 },
-    { id: 'gummy', ...FRONT, z: 16.5 },
-    { id: 'orange', ...BACK, z: -6.25 },
-    { id: 'grape', ...BACK, z: -1.1 },
-    { id: 'ocean', ...BACK, z: 1.9 },
-    { id: 'void', ...BACK, z: 6.75 },
-    { id: 'curly', x: -16.4, y: CORNER.h, z: 21.4, scale: 0.6, compact: true },
-    { id: 'tails', x: -16.4, y: CORNER.h, z: 23.6, scale: 0.6, compact: true },
-    { id: 'braids', x: -16.4, y: CORNER.h, z: 25.8, scale: 0.6, compact: true },
-    { id: 'princess', x: -21.5, y: CORNER.h, z: 26.5, scale: 1.15, noName: true }, // the LIMITED billboard names it
+    ...FRONT_ROW.map((id, i) => ({ id, ...FRONT, z: SHOP_Z0 + i * SHOP_DZ })),
+    ...BACK_ROW.map((id, i) => ({ id, ...BACK, z: SHOP_Z0 + (i + 0.5) * SHOP_DZ })),
   ])
   buildShopSign(g)
-  const corner = buildLimitedCorner(g, addCollider)
-  const gift = buildGift(g, addCollider)
   const sleeper = buildAfkShelf(g)
   buildTreadmillSign(g)
-  const lucky = buildLuckySpin(g, addCollider)
   const rebirthAltar = buildRebirth(g, addCollider)
   buildBunting(g)
   const clouds = buildClouds(g)
 
-  // The east wall row, north to south, consoles against the wall. Rebirth tiers
-  // unlock with rebirths; the top four are bought once with hair (the green-coin price).
+  // The east wall row, north to south, consoles against the wall: one evenly
+  // spaced line (TM_DZ apart) in two groups of five around the mid-wall pillar.
+  // Every tier past the FREE x1 unlocks at a rebirth count (a threshold, never
+  // spent): the first few come one or two rebirths apart, the big multipliers
+  // line up with the prestige milestones (10, 15, 20 rebirths).
   const TM_X = 21
+  const TM_Z0 = -26 // the FREE x1, under the AFK ledge
+  const TM_DZ = 5.4 // m between neighbours
+  const TM_GAP = 8 // m between the two groups, around the pillar at z -0.9
+  const tz = (i) => TM_Z0 + i * TM_DZ + (i >= 5 ? TM_GAP - TM_DZ : 0)
   const tiers = [
-    { key: 'x1', z: -26, theme: 'dark', mult: 1, labelY: 4.0 },
-    { key: 'x2', z: -20.6, theme: 'blue', mult: 2, rebirths: 1, labelY: 4.3 },
-    { key: 'x3', z: -15.2, theme: 'pink', mult: 3, rebirths: 2, labelY: 4.4 },
-    { key: 'x4', z: -9.8, theme: 'gold', mult: 4, rebirths: 4, deco: 'crown', labelY: 4.9 },
-    { key: 'x6', z: -4.4, theme: 'neon', mult: 6, rebirths: 6, deco: 'neon', labelY: 4.9 },
-    { key: 'x8', z: 3.6, theme: 'angel', mult: 8, cost: 85000, deco: 'wings', labelY: 5.3 },
-    { key: 'x12', z: 9.0, theme: 'spike', mult: 12, cost: 139000, deco: 'spikes', labelY: 5.5 },
-    { key: 'x25', z: 14.4, theme: 'galaxy', mult: 25, cost: 279000, deco: 'planet', labelY: 5.9 },
-    { key: 'x100', z: 19.8, theme: 'cosmic', mult: 100, cost: 729000, deco: 'vortex', labelY: 6.4 },
-    // Past the Lucky Spin tower.
-    { key: 'x500', z: 32.6, theme: 'rainbow', mult: 500, cost: 2239000, deco: 'rainbow', labelY: 7.2 },
+    { key: 'x1', z: tz(0), theme: 'dark', mult: 1, labelY: 4.0 },
+    { key: 'x2', z: tz(1), theme: 'blue', mult: 2, rebirths: 1, labelY: 4.3 },
+    { key: 'x3', z: tz(2), theme: 'pink', mult: 3, rebirths: 2, labelY: 4.4 },
+    { key: 'x4', z: tz(3), theme: 'gold', mult: 4, rebirths: 4, deco: 'crown', labelY: 4.9 },
+    { key: 'x6', z: tz(4), theme: 'neon', mult: 6, rebirths: 6, deco: 'neon', labelY: 4.9 },
+    { key: 'x8', z: tz(5), theme: 'angel', mult: 8, rebirths: 8, deco: 'wings', labelY: 5.3 },
+    { key: 'x12', z: tz(6), theme: 'spike', mult: 12, rebirths: 10, deco: 'spikes', labelY: 5.5 },
+    { key: 'x25', z: tz(7), theme: 'galaxy', mult: 25, rebirths: 12, deco: 'planet', labelY: 5.9 },
+    { key: 'x100', z: tz(8), theme: 'cosmic', mult: 100, rebirths: 15, deco: 'vortex', labelY: 6.4 },
+    { key: 'x500', z: tz(9), theme: 'rainbow', mult: 500, rebirths: 20, deco: 'rainbow', labelY: 7.2 },
   ]
   const MULT_FILL = {
     rainbow: ['#ffffff', '#ff5fc0'],
@@ -742,24 +560,23 @@ export function buildLobby(scene, addCollider, { onEvent } = {}) {
   })
   const tierLabels = (tier, unlocked) => {
     const lines = []
-    if (!tier.rebirths && !tier.cost) lines.push({ text: 'FREE!', size: 0.5, fill: ['#fff27a', '#ffb000'] })
-    else if (!unlocked && tier.rebirths) lines.push({ text: `🔒 ${tier.rebirths} Rebirth${tier.rebirths === 1 ? '' : 's'}`, size: 0.42, fill: ['#ffb0b0', '#ff3b3b'] })
-    else if (!unlocked && tier.cost) lines.push({ text: `◎ ${formatNumber(tier.cost)}`, size: 0.48, fill: ['#b6ff7a', '#33d11c'] })
+    if (!tier.rebirths) lines.push({ text: 'FREE!', size: 0.5, fill: ['#fff27a', '#ffb000'] })
+    else if (!unlocked) lines.push({ text: `🔒 ${tier.rebirths} Rebirth${tier.rebirths === 1 ? '' : 's'}`, size: 0.42, fill: ['#ffb0b0', '#ff3b3b'] })
     lines.push({ text: `x${tier.mult} Hair`, size: 0.9, fill: MULT_FILL[tier.theme] })
     return lines
   }
-  const tierUnlocked = (tier) => (tier.cost ? owns(`tm:${tier.key}`) : progress.rebirths >= (tier.rebirths ?? 0))
+  const tierUnlocked = (tier) => progress.rebirths >= (tier.rebirths ?? 0)
 
   // Lilac stage strip under the row, with a yellow edge on the room side.
   slab(g, std('#c9c2ff', { roughness: 0.5 }), (16.6 + ROOM.maxX) / 2, 4, ROOM.maxX - 16.6, 64, 0, 0.05).castShadow = false
   slab(g, std(C.yellow, { roughness: 0.4 }), 16.75, 4, 0.3, 64, 0, 0.08).castShadow = false
 
   const arrow = arrowMesh()
-  arrow.position.set(TM_X - 1.6, 6.3, -26)
+  arrow.position.set(TM_X - 1.6, 6.3, TM_Z0)
   g.add(arrow)
-  const chevrons = buildChevrons(g, { x: 5.2, z: 4 }, { x: 16.5, z: -23.5 }, 9)
+  const chevrons = buildChevrons(g, { x: 5.2, z: 4 }, { x: 16.5, z: TM_Z0 + 2.5 }, 9)
 
-  // Interactions (E): equip each displayed hair, the gift, the rebirth altar.
+  // Interactions (E): equip each displayed hair, the rebirth altar.
   const interactables = [
     ...south.interactables,
     ...shop.map((s) => ({
@@ -770,30 +587,25 @@ export function buildLobby(scene, addCollider, { onEvent } = {}) {
         const name = s.style.name
         if (progress.equipped === s.id) return [`${name} is equipped`, false]
         if (canEquip(s.id)) return [`Equip ${name} (+${s.style.bonus} / Hair)`, true]
-        if (canAcquire(s.id)) return s.style.cost != null ? [`Buy ${name} for ${s.style.cost} Hair`, true] : [`Claim ${name} (limited, free!)`, true]
-        if (s.style.cost != null) return [`${name} costs ${s.style.cost} Hair (you have ${progress.hair})`, false]
-        if (s.style.limitedUntil != null) return [`${name} has expired`, false]
-        return [`${name}: ${requirementText(s.id)}${s.style.rebirths ? '' : ' (escape the course!)'}`, false]
+        if (canAcquire(s.id)) return [`Buy ${name} for ${s.style.price} Wins`, true]
+        const req = styleReq(s.id)
+        if (req.type === 'price') return [`${name} costs ${req.value} Wins (you have ${progress.wins}, escape the course!)`, false]
+        return [`${name}: ${requirementText(s.id)}`, false]
       },
       action: () => equip(s.id),
     })),
-    // Treadmill consoles: the price / requirement, or buy with E.
-    ...treadmills.filter((t) => t.tier.rebirths || t.tier.cost).map((t) => ({
+    // Treadmill consoles: the rebirth requirement (nothing to buy, so the prompt is never enabled).
+    ...treadmills.filter((t) => t.tier.rebirths).map((t) => ({
       position: t.center,
       radius: 3.4,
       prompt: () => {
         const { tier } = t
         if (tierUnlocked(tier)) return [`x${tier.mult} Hair treadmill: run on it!`, false]
-        if (tier.rebirths) return [`x${tier.mult} Hair needs ${tier.rebirths} Rebirth${tier.rebirths === 1 ? '' : 's'}`, false]
-        return progress.hair >= tier.cost
-          ? [`Buy x${tier.mult} Hair treadmill for ${formatNumber(tier.cost)} Hair`, true]
-          : [`x${tier.mult} Hair costs ${formatNumber(tier.cost)} Hair (you have ${formatNumber(progress.hair)})`, false]
+        return [`x${tier.mult} Hair needs ${tier.rebirths} Rebirth${tier.rebirths === 1 ? '' : 's'} (you have ${progress.rebirths})`, false]
       },
-      action: () => buy(`tm:${t.tier.key}`, t.tier.cost),
+      action: () => {},
     })),
-    gift.interact,
     rebirthAltar.interact,
-    lucky.interact,
   ]
 
   let lastState = null
@@ -816,10 +628,7 @@ export function buildLobby(scene, addCollider, { onEvent } = {}) {
       for (const t of treadmills) t.update(dt, time)
       shop.forEach((s) => s.update(dt, time))
       showNearestInfo(shop)
-      corner.update(time)
-      lucky.update(dt, time)
       south.update(dt, time)
-      gift.update(dt, time)
       if (lastState) rebirthAltar.update(dt, time, lastState)
       sleeper(time)
       clouds(time)

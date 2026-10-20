@@ -10,8 +10,10 @@ export const player = {
   position: { x: 0, y: 0, z: 0 }, // capsule base (feet)
   velocity: { x: 0, y: 0, z: 0 },
   grounded: true,
+  zipping: false, // riding the hair cable: hairCable.js owns the velocity, no gravity
   facing: Math.PI, // yaw the character model faces, radians
   moveSpeed: PHYSICS.moveSpeed,
+  gravityScale: 1, // times PHYSICS.gravity (main.js lowers it in the Star Summit)
   dims: { ...PLAYER_DIMS },
 }
 
@@ -21,6 +23,7 @@ export function resetPlayer(spawn = SPAWN, facing = SPAWN_FACING) {
   player.position.z = spawn.z
   player.velocity.x = player.velocity.y = player.velocity.z = 0
   player.grounded = true
+  player.zipping = false
   player.facing = facing
 }
 
@@ -34,7 +37,7 @@ export const floorAt = (x, z, feetY) => (feetY === undefined ? GROUND_Y : floorU
 
 const TAU = Math.PI * 2
 // Turns angle `from` toward `to` by at most maxDelta, the short way round.
-function rotateTowards(from, to, maxDelta) {
+export function rotateTowards(from, to, maxDelta) {
   const diff = Math.atan2(Math.sin(to - from), Math.cos(to - from))
   if (Math.abs(diff) <= maxDelta) return to
   return (from + Math.sign(diff) * maxDelta) % TAU
@@ -70,18 +73,21 @@ export function step(dt) {
   const wishX = (fwdX * mv.z + rightX * mv.x) * scale
   const wishZ = (fwdZ * mv.z + rightZ * mv.x) * scale
 
-  // Snappy start, slightly softer stop; both scale with the walk speed.
-  const rate = (len > 0.01 ? PHYSICS.accel : PHYSICS.decel) * Math.max(1, player.moveSpeed / PHYSICS.moveSpeed)
-  approach2D(player.velocity, wishX * player.moveSpeed, wishZ * player.moveSpeed, rate * dt)
+  const zipping = player.zipping
+  if (!zipping) {
+    // Snappy start, slightly softer stop; both scale with the walk speed.
+    const rate = (len > 0.01 ? PHYSICS.accel : PHYSICS.decel) * Math.max(1, player.moveSpeed / PHYSICS.moveSpeed)
+    approach2D(player.velocity, wishX * player.moveSpeed, wishZ * player.moveSpeed, rate * dt)
+  }
 
   if (inputState.jump) {
-    if (player.grounded) player.velocity.y = PHYSICS.jumpSpeed
+    if (player.grounded && !zipping) player.velocity.y = PHYSICS.jumpSpeed
     inputState.jump = false
   }
   player.grounded = false
 
   const p = player.position
-  player.velocity.y += PHYSICS.gravity * dt
+  if (!zipping) player.velocity.y += PHYSICS.gravity * player.gravityScale * dt
   p.x += player.velocity.x * dt
   p.y += player.velocity.y * dt
   p.z += player.velocity.z * dt
@@ -104,8 +110,8 @@ export function step(dt) {
     return
   }
 
-  // Turn at a fixed rate toward the heading.
-  if (Math.hypot(wishX, wishZ) > 0.05) {
+  // Turn at a fixed rate toward the heading (the cable turns the body while riding).
+  if (!zipping && Math.hypot(wishX, wishZ) > 0.05) {
     player.facing = rotateTowards(player.facing, Math.atan2(wishX, wishZ), PHYSICS.turnSpeed * dt)
   }
 }
